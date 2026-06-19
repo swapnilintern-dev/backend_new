@@ -154,8 +154,17 @@ export const login = async (req , res ) =>{
     }
 
     const user = await Vendor.findOne({ mobile_no }) ;
+
+    // if( user.approvalStatus === "Pending" ){
+    //   return res.status(403)
+    //   .json({
+
+    //     message :"You can't  login ",
+    //     success : false 
+    //   }) ;
+    // }
     
-    console.log(user);
+    // console.log(user);
     if( !user ){
       return res.status(401)
       .json({ 
