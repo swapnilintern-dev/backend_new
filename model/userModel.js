@@ -102,14 +102,21 @@ const vendorSchema = new mongoose.Schema(
           default : 1 
         }
       }
-    ]
+    ],
+    
+  approvalStatus:{
+    type: String,
+    enum: ["Pending", "Approved", "Rejected"],
+    default: "Pending"
+}
   },
   {
     timestamps: true,
   }
 );
 
-export default mongoose.model("Vendor", vendorSchema);
+const Vendor =  mongoose.model("Vendor", vendorSchema);
+export default Vendor ;
 
 
 

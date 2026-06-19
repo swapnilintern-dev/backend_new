@@ -123,12 +123,10 @@ export const registerVendor = async (req, res) => {
         : undefined,
     });
 
-    return res.status(201).json({
-      message: "Vendor registered successfully",
-      success: true,
-      vendor,
-    });
-
+return res.status(201).json({
+    success: true,
+    message: "Registration submitted. Approval status will be sent to your email."
+});
   } catch (error) {
     console.log(error);
 

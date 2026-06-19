@@ -203,3 +203,106 @@ export const placeSingleOrder = async(req , res ) =>{
         })
     }
 };
+
+
+export const cancelOrder = async(req , res ) =>{
+
+    try{
+
+        const userId = req.id ;
+        
+        const product_id = req.params.id ;
+
+        const existingOrder = await order.findById( product_id ) ;
+
+        if( !existingOrder ){
+            return res.status(404)
+            .json({ 
+                message :"Order not found ",
+                success : false 
+            });
+        }
+
+        if( existingOrder.orderStatus === "Delivered" ){
+
+            return res.status(401)
+            .json({
+                message : "Delivered Product can't be cancelled ",
+                success : false 
+            });
+        }
+
+        console.log("exiting order is :" , typeof(existingOrder.user.toString() ), "and " ,typeof(userId) ) ;
+
+        if( existingOrder.user.toString() !== userId ) {
+            return res.status(403)
+            .json({
+                message :"unauthorized user ",
+                success : false 
+            });
+        }
+
+        existingOrder.orderStatus ="Cancelled";
+
+        await existingOrder.save();
+
+        return res.status(200)
+        .json({
+            message : "order cancel successfully ",
+            success : true 
+        });
+
+    }
+    catch(er) {
+        console.log("error is :" , er ) ;
+
+        return res.status(500)
+        .json({
+            message :"Internal server error ",
+            success : false 
+        })
+    }
+}
+
+
+
+// export const cancelOrder = async (req, res) => {
+//   try {
+
+//     const userId = req.id;
+//     const orderId = req.params.id;
+
+//     const existingOrder = await order.findById(orderId);
+
+//     if (!existingOrder) {
+//       return res.status(404).json({
+//         message: "Order not found",
+//         success: false
+//       });
+//     }
+
+//     if (existingOrder.user.toString() !== userId) {
+//       return res.status(403).json({
+//         message: "Unauthorized",
+//         success: false
+//       });
+//     }
+
+//     existingOrder.orderStatus = "Cancelled";
+//     await existingOrder.save();
+
+//     return res.status(200).json({
+//       message: "Order cancelled successfully",
+//       success: true,
+//       existingOrder
+//     });
+
+//   } catch (er) {
+//     console.log(er);
+
+//     return res.status(500).json({
+//       message: "Internal server error",
+//       success: false
+//     });
+//   }
+// };
