@@ -447,19 +447,3 @@ export const totalSell = async(req , res ) =>{
     }
 }
 
-// const revenue = await Order.aggregate([
-//   {
-//     $match: { orderStatus: "Delivered" }
-//   },
-//   {
-//     $group: {
-//       _id: null,
-//       totalRevenue: { $sum: "$totalAmount" }
-//     }
-//   }
-// ]);
-
-// res.status(200).json({
-//   success: true,
-//   totalRevenue: revenue[0]?.totalRevenue || 0
-// });
