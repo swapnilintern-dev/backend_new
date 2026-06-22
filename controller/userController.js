@@ -2,7 +2,12 @@ import Vendor from "../model/userModel.js";
 import cloudinary from "../utils/cloudinary.js";
 import getDatauri from "../utils/datauri.js";
 import sharp from "sharp";
+import multer from "multer";
 import jwt from "jsonwebtoken";
+
+
+
+
 
 export const registerVendor = async (req, res) => {
   try {
@@ -27,7 +32,7 @@ export const registerVendor = async (req, res) => {
     const store_pic = req.files?.store_pic?.[0];
     const drug_lic_copy = req.files?.drug_lic_copy?.[0];
 
-    // Basic Validation
+
     if (!store_name || !mobile_no || !email) {
       return res.status(400).json({
         success: false,
@@ -65,15 +70,18 @@ export const registerVendor = async (req, res) => {
 
     // GST PDF Upload
     if (gst_pdf) {
-      const gstUri = getDatauri(gst_pdf);
+      const gstUri = getDatauri(gst_pdf); 
+
 
       gstUpload = await cloudinary.uploader.upload(gstUri, {
         folder: "vendors/gst",
-        resource_type: "auto",
-        use_filename: true,
-        unique_filename: false,
+        resource_type: "auto",   // ✅ Use "raw" for PDFs, not "auto"
+        // use_filename: true,
+        // unique_filename: true,  // ✅ Avoid filename conflicts
       });
     }
+
+console.log("auto is :",gstUpload )
 
     // Drug License PDF Upload
     if (drug_lic_copy) {
@@ -81,11 +89,13 @@ export const registerVendor = async (req, res) => {
 
       drugUpload = await cloudinary.uploader.upload(drugUri, {
         folder: "vendors/drug-license",
-        resource_type: "auto",
-        use_filename: true,
-        unique_filename: false,
+        resource_type: "auto",   // ✅ Same here
+        // use_filename: true,
+        // unique_filename: true,
       });
     }
+
+    console.log("raw is:" , drugUpload ) ;
 
     let autoPassword = Math.floor(1000 + Math.random() * 9000);
 
@@ -112,22 +122,23 @@ export const registerVendor = async (req, res) => {
         publicId: storeUpload.public_id,
       },
 
-gst_pdf: {
-  url: gstUpload.secure_url,
-  publicId: gstUpload.public_id,
-  fileName: gst_pdf.originalname,
-},
+      gst_pdf: {
+        url: gstUpload.secure_url,
+        publicId: gstUpload.public_id,
+        fileName: gst_pdf.originalname,
+      },
 
       drug_lic_copy: {
-          url: drugUpload.secure_url,
-          publicId: drugUpload.public_id,
-          fileName :drug_lic_copy.originalname
-        }
+        url: drugUpload.secure_url,
+        publicId: drugUpload.public_id,
+        fileName: drug_lic_copy.originalname
+      }
     });
 
     return res.status(201).json({
       success: true,
-      message: "Registration submitted. Approval status will be sent to your email."
+      message: "Registration submitted. Approval status will be sent to your email.",
+      pdf_url: gstUpload.secure_url
     });
   } catch (error) {
     console.log(error);
