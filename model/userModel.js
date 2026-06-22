@@ -75,10 +75,11 @@ const vendorSchema = new mongoose.Schema(
     //   required: true,
     },
 
-    gst_pdf: {
-      url: String,
-      publicId: String,
-    },
+ gst_pdf: {
+  url: String,
+  publicId: String,
+  fileName: String,
+},
 
     store_pic: {
       url: String,
@@ -88,6 +89,7 @@ const vendorSchema = new mongoose.Schema(
     drug_lic_copy: {
       url: String,
       publicId: String,
+      fileName :String ,
     },
 
     cart:[

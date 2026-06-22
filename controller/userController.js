@@ -2,7 +2,7 @@ import Vendor from "../model/userModel.js";
 import cloudinary from "../utils/cloudinary.js";
 import getDatauri from "../utils/datauri.js";
 import sharp from "sharp";
-import jwt from "jsonwebtoken" ;
+import jwt from "jsonwebtoken";
 
 export const registerVendor = async (req, res) => {
   try {
@@ -28,7 +28,7 @@ export const registerVendor = async (req, res) => {
     const drug_lic_copy = req.files?.drug_lic_copy?.[0];
 
     // Basic Validation
-    if (!store_name || !mobile_no || !email ) {
+    if (!store_name || !mobile_no || !email) {
       return res.status(400).json({
         success: false,
         message: "Required fields are missing",
@@ -69,7 +69,9 @@ export const registerVendor = async (req, res) => {
 
       gstUpload = await cloudinary.uploader.upload(gstUri, {
         folder: "vendors/gst",
-        resource_type: "raw",
+        resource_type: "auto",
+        use_filename: true,
+        unique_filename: false,
       });
     }
 
@@ -79,13 +81,15 @@ export const registerVendor = async (req, res) => {
 
       drugUpload = await cloudinary.uploader.upload(drugUri, {
         folder: "vendors/drug-license",
-        resource_type: "raw",
+        resource_type: "auto",
+        use_filename: true,
+        unique_filename: false,
       });
     }
 
-    let autoPassword = Math.floor(1000+ Math.random()* 9000 ) ;
-    
-    console.log( "auto generated password is :" ,  autoPassword ) ;
+    let autoPassword = Math.floor(1000 + Math.random() * 9000);
+
+    console.log("auto generated password is :", autoPassword);
 
     const vendor = await Vendor.create({
       vendor_type,
@@ -101,32 +105,30 @@ export const registerVendor = async (req, res) => {
       gst_status,
       drug_lic_no,
       drug_lic_ex_date,
-      password : autoPassword ,
+      password: autoPassword,
 
       store_pic: {
         url: storeUpload.secure_url,
         publicId: storeUpload.public_id,
       },
 
-      gst_pdf: gstUpload
-        ? {
-            url: gstUpload.secure_url,
-            publicId: gstUpload.public_id,
-          }
-        : undefined,
+gst_pdf: {
+  url: gstUpload.secure_url,
+  publicId: gstUpload.public_id,
+  fileName: gst_pdf.originalname,
+},
 
-      drug_lic_copy: drugUpload
-        ? {
-            url: drugUpload.secure_url,
-            publicId: drugUpload.public_id,
-          }
-        : undefined,
+      drug_lic_copy: {
+          url: drugUpload.secure_url,
+          publicId: drugUpload.public_id,
+          fileName :drug_lic_copy.originalname
+        }
     });
 
-return res.status(201).json({
-    success: true,
-    message: "Registration submitted. Approval status will be sent to your email."
-});
+    return res.status(201).json({
+      success: true,
+      message: "Registration submitted. Approval status will be sent to your email."
+    });
   } catch (error) {
     console.log(error);
 
@@ -138,22 +140,22 @@ return res.status(201).json({
 };
 
 
-export const login = async (req , res ) =>{
+export const login = async (req, res) => {
 
-  try{
-     
-    const { mobile_no , password } = req.body ;
-    
-    if( !mobile_no || !password ) {
+  try {
+
+    const { mobile_no, password } = req.body;
+
+    if (!mobile_no || !password) {
 
       return res.status(401)
-      .json({
-        message :"All field are required " ,
-        success : false 
-      }) ;
+        .json({
+          message: "All field are required ",
+          success: false
+        });
     }
 
-    const user = await Vendor.findOne({ mobile_no }) ;
+    const user = await Vendor.findOne({ mobile_no });
 
     // if( user.approvalStatus === "Pending" ){
     //   return res.status(403)
@@ -163,35 +165,35 @@ export const login = async (req , res ) =>{
     //     success : false 
     //   }) ;
     // }
-    
+
     // console.log(user);
-    if( !user ){
+    if (!user) {
       return res.status(401)
-      .json({ 
-        message :"User not found " ,
-        success : false 
-      }) ;
+        .json({
+          message: "User not found ",
+          success: false
+        });
     }
 
-    console.log( "enter password " , password , "data base password is :" , user.password  ) ;
+    console.log("enter password ", password, "data base password is :", user.password);
 
 
-    if( password !== user.password ){
+    if (password !== user.password) {
 
       return res.status(401)
-      .json({ 
-        message :"Credentials are wrong ",
+        .json({
+          message: "Credentials are wrong ",
 
-        success : false 
-      }) ;
+          success: false
+        });
     }
-    
+
     // token genrate
     const token = jwt.sign(
 
-      { userId : user._id  } ,
-      process.env.SECRET_KEY ,
-      {expiresIn:"1d" } 
+      { userId: user._id },
+      process.env.SECRET_KEY,
+      { expiresIn: "1d" }
     );
 
 
@@ -204,43 +206,43 @@ export const login = async (req , res ) =>{
     // });
 
 
-    res.cookie("token" , token ,{
+    res.cookie("token", token, {
 
 
-      httpOnly:true ,
-      maxAge :1*24*60*60*1000 ,
-      sameSite:"strict"
+      httpOnly: true,
+      maxAge: 1 * 24 * 60 * 60 * 1000,
+      sameSite: "strict"
 
-    } );
-
-    return res.status(201)
-    .json({
-      message :"Login success ",
-      success : true
-    }) ;
-
-  }
-  catch(er ){
-
-    console.log(er , "error is :") ; 
-  }
-} ;
-
-export const logout = async( req , res ) =>{
-
-  try{
-
-    res.cookie("token", "" , {maxAge:0}) ;
-
-    return res.status(200)
-    .json({ 
-      message :"Logout successfuly",
-      success : true 
     });
 
+    return res.status(201)
+      .json({
+        message: "Login success ",
+        success: true
+      });
+
   }
-  catch(er) {
-    console.log(er , "error is :" ) ;
+  catch (er) {
+
+    console.log(er, "error is :");
+  }
+};
+
+export const logout = async (req, res) => {
+
+  try {
+
+    res.cookie("token", "", { maxAge: 0 });
+
+    return res.status(200)
+      .json({
+        message: "Logout successfuly",
+        success: true
+      });
+
+  }
+  catch (er) {
+    console.log(er, "error is :");
   }
 }
 
