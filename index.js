@@ -45,10 +45,7 @@ app.get('/' , (req , res ) =>{
     res.send("<h1> This is from Client side </h1>") ;
 })
 
-
-app.listen(port , () =>{
-
-   
+app.listen(port , () =>{ 
     connectDb() ;
     console.log("Server is working " , port ) ;
 })
