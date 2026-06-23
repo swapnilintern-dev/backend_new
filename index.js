@@ -22,14 +22,13 @@ const port = process.env.PORT || 3000 ;
 app.use( express.json()) ;
 app.use(cookieParser() ) ;
 app.use(urlencoded({ extended: true })) ;
-
-const corsOptions ={
-
-    origin : 'http://localhost:5173',
-    credentials : true 
-}
-
-app.use(cors(corsOptions)) ;
+//CHANGED
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 
 // all api 
 app.use('/vsArogya', userRouter ) ;
