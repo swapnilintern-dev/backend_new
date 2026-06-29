@@ -148,11 +148,11 @@ export const registerVendor = async (req, res) => {
 
     await transporter.sendMail({
       from: process.env.EMAIL,
-      to: pendingVendor.email,
+      to:email,
       subject: "Account Approved",
       html: `
         <h2>Registration Approved</h2>
-        <p>Hi , ${pendingVendor.contact_person_name},</p>
+        <p>Hi , ${contact_person_name},</p>
 <p> Thank you for submitting your application! 🎉
 
 We've successfully received it, and it's currently under review by our team.
