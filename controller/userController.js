@@ -138,7 +138,7 @@ export const registerVendor = async (req, res) => {
 
 
 
-    const transporter = nodemailer.createTransport({
+    const transporter = nodmailer.createTransport({
       service: "gmail",
       auth: {
         user: process.env.EMAIL,
