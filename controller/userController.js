@@ -4,6 +4,7 @@ import getDatauri from "../utils/datauri.js";
 import sharp from "sharp";
 import multer from "multer";
 import jwt from "jsonwebtoken";
+import nodmailer from "nodemailer"
 
 
 
@@ -70,7 +71,7 @@ export const registerVendor = async (req, res) => {
 
     // GST PDF Upload
     if (gst_pdf) {
-      const gstUri = getDatauri(gst_pdf); 
+      const gstUri = getDatauri(gst_pdf);
 
 
       gstUpload = await cloudinary.uploader.upload(gstUri, {
@@ -81,7 +82,7 @@ export const registerVendor = async (req, res) => {
       });
     }
 
-console.log("auto is :",gstUpload )
+    console.log("auto is :", gstUpload)
 
     // Drug License PDF Upload
     if (drug_lic_copy) {
@@ -95,7 +96,7 @@ console.log("auto is :",gstUpload )
       });
     }
 
-    console.log("raw is:" , drugUpload ) ;
+    console.log("raw is:", drugUpload);
 
     let autoPassword = Math.floor(1000 + Math.random() * 9000);
 
@@ -135,9 +136,39 @@ console.log("auto is :",gstUpload )
       }
     });
 
+
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.E_PASS
+      }
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL,
+      to: pendingVendor.email,
+      subject: "Account Approved",
+      html: `
+        <h2>Registration Approved</h2>
+        <p>Hi , ${pendingVendor.contact_person_name},</p>
+<p> Thank you for submitting your application! 🎉
+
+We've successfully received it, and it's currently under review by our team.
+
+No action is required from your side at the moment. We'll notify you via email as soon as your application is approved or if we need any additional information.
+
+Thanks for your patience, and take care! 😊
+
+Best regards,
+Team : VS Arogya </p> 
+      `
+    });
+
     return res.status(201).json({
       success: true,
-      message: "Registration submitted. Approval status will be sent to your email.",
+      message: "Registration submitted. n",
       pdf_url: gstUpload.secure_url
     });
   } catch (error) {
@@ -229,7 +260,8 @@ export const login = async (req, res) => {
     return res.status(201)
       .json({
         message: "Login success ",
-        success: true
+        success: true,
+        role: user.role
       });
 
   }

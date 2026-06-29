@@ -1,7 +1,11 @@
 import mongoose from "mongoose";
 
 const vendorSchema = new mongoose.Schema(
-  {
+  { 
+    role:{
+      type :String ,
+    },
+
     vendor_type: {
       type: String,
       required: true,

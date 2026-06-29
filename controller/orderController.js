@@ -32,11 +32,11 @@ export const placeOrder = async( req , res ) => {
             }) ;
         }
 
-        if( !user.cart.length === 0 ) {
+        if( user.cart.length === 0 ) {
             return res.status(401)
-            .json({ 
+            .json({
                 message :"Cart is empty !! Plz add product " ,
-                success : false 
+                success : false
             }) ;
         }
         

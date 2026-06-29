@@ -1,5 +1,5 @@
 import express from "express";
-import addnewProduct, { deleteProduct, getAllProducts } from "../controller/postController.js";
+import addnewProduct, { deleteProduct, getAllProducts, updateProduct } from "../controller/postController.js";
 import upload from "../middlewares/multer.js";
 // import  addCart from "../controller/cartController.js";
 
@@ -14,6 +14,7 @@ router.post(
 );
 
 router.get("/all-products", getAllProducts ) ;
+router.put("/update-product/:id", upload.single("image"), updateProduct ) ;
 router.delete("/delete-product/:id" , deleteProduct ) ;
 
 export default router;
