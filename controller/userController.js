@@ -79,6 +79,8 @@ export const registerVendor = async (req, res) => {
       });
     }
 
+    console.log("auto is :", gstUpload)
+
     // Drug License PDF Upload
     if (drug_lic_copy) {
       const drugUri = getDatauri(drug_lic_copy);
@@ -91,10 +93,11 @@ export const registerVendor = async (req, res) => {
       });
     }
 
+    console.log("raw is:", drugUpload);
+
     let autoPassword = Math.floor(1000 + Math.random() * 9000);
 
     console.log("auto generated password is :", autoPassword);
-
 
     const vendor = await Vendor.create({
       vendor_type,
@@ -111,91 +114,76 @@ export const registerVendor = async (req, res) => {
       drug_lic_no,
       drug_lic_ex_date,
       password: autoPassword,
-      role: "buyer",
 
       store_pic: {
         url: storeUpload.secure_url,
         publicId: storeUpload.public_id,
       },
 
-      // GST PDF is optional — only include it when one was actually uploaded.
-      ...(gstUpload && {
-        gst_pdf: {
-          url: gstUpload.secure_url,
-          publicId: gstUpload.public_id,
-          fileName: gst_pdf?.originalname,
-        },
-      }),
+      gst_pdf: {
+        url: gstUpload.secure_url,
+        publicId: gstUpload.public_id,
+        fileName: gst_pdf.originalname,
+      },
 
-      ...(drugUpload && {
-        drug_lic_copy: {
-          url: drugUpload.secure_url,
-          publicId: drugUpload.public_id,
-          fileName: drug_lic_copy?.originalname,
-        },
-      }),
+      drug_lic_copy: {
+        url: drugUpload.secure_url,
+        publicId: drugUpload.public_id,
+        fileName: drug_lic_copy.originalname
+      }
     });
 
-    console.log("vendor details is:" , vendor ) ;
 
 
     const transporter = nodmailer.createTransport({
       service: "gmail",
       auth: {
         user: process.env.EMAIL,
-        pass: process.env.E_PASS,
-      },
+        pass: process.env.E_PASS
+      }
     });
 
-    console.log( "email is :" , email ) ;
-
     const info = await transporter.sendMail({
-        from: process.env.EMAIL,
-        to: email,
-        subject: "Vendor Registration",
-        html: `
-      <h1>Hi ${contact_person_name}</h1>
+      from: process.env.EMAIL,
+      to: email,
+      subject: "Vendor Registration",
+      html: `
 
+        <h1>Hi ${contact_person_name} </h1>
       <p>🎉 Your vendor registration has been successfully received.</p>
-
       <p>Your application is currently under review.</p>
-
       <p>We'll notify you via email once the verification process is complete.</p>
+      <p>Thank you for being part of our growing network🚀. 🎉 </p>
+       <p>Warm Regards,<br>
+       Team:VS Arogya </p>
 
-      <p>Thank you for being part of our growing network 🚀</p>
+      `
+    });
 
-      <p>Warm Regards,<br>Team VS Arogya</p>
-    `,
-      });
-
-      if( info.accepted.length < 0 ) 
-        return res.status( 404 )
-      .json({
-
-        message :"mail sent fail ", success : false 
-
-      });
-
-    console.log("Email Info !!", info);
-
-    return res.status(201)
-    .json({
-      message :"sumitted ", success : true 
-    }) ;
+    console.log("email info is :", info);
 
 
+    if (info.accepted.length < 0) {
+      return res.status(404)
+        .json({
+          message: "Email not sent ", success: false
+        });
+    }
 
-
+    return res.status(201).json({
+      success: true,
+      message: "Registration submitted. Approval status will be sent to your email.",
+      pdf_url: gstUpload.secure_url
+    });
   } catch (error) {
     console.log(error);
-    console.log("Sending success response to Flutter...");
+
     return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
-
 
 export const login = async (req, res) => {
 
