@@ -139,40 +139,29 @@ export const registerVendor = async (req, res) => {
         },
       }),
     });
-    console.log("Vendor created successfully.");
+
+    // =======================
+    // RETURN RESPONSE FIRST
+    // =======================
 
 
-    console.log("Preparing email transporter...");
-const transporter = nodmailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL,
-    pass: process.env.E_PASS,
-  },
-});
+    // =======================
+    // SEND EMAIL IN BACKGROUND
+    // =======================
+    const transporter = nodmailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.E_PASS,
+      },
+    });
 
-// =======================
-// RETURN RESPONSE FIRST
-// =======================
-
-res.status(201).json({
-  success: true,
-  message: "Registration submitted. Approval status will be sent to your email.",
-  pdf_url: gstUpload ? gstUpload.secure_url : null,
-});
-
-console.log("Success response sent to Flutter.");
-
-// =======================
-// SEND EMAIL IN BACKGROUND
-// =======================
-
-const info = await transporter
-  .sendMail({
-    from: process.env.EMAIL,
-    to: email,
-    subject: "Vendor Registration",
-    html: `
+    const info = await transporter
+      .sendMail({
+        from: process.env.EMAIL,
+        to: email,
+        subject: "Vendor Registration",
+        html: `
       <h1>Hi ${contact_person_name}</h1>
 
       <p>🎉 Your vendor registration has been successfully received.</p>
@@ -185,13 +174,25 @@ const info = await transporter
 
       <p>Warm Regards,<br>Team VS Arogya</p>
     `,
-  })
- console.log("Email Info !!" , info);
+      });
 
-return;
+      if( info.accepted.length < 0 ) 
+        return res.status( 404 )
+      .json({
+
+        message :"mail sent fail ", success : false 
+
+      });
+
+    console.log("Email Info !!", info);
+
+    return res.status(201)
+    .json({
+      message :"sumitted ", success : true 
+    }) ;
   } catch (error) {
     console.log(error);
-console.log("Sending success response to Flutter...");
+    console.log("Sending success response to Flutter...");
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -242,7 +243,7 @@ export const login = async (req, res) => {
     // accounts (admin / marketing / delivery) skip this approval gate.
     const staffRoles = ["admin", "marketing", "delivery"];
     if (!staffRoles.includes((user.role || "").toLowerCase()) &&
-        user.approvalStatus !== "Approved") {
+      user.approvalStatus !== "Approved") {
       const msg = user.approvalStatus === "Rejected"
         ? "Your registration was rejected. Please contact support."
         : "Your account is pending admin approval. You'll get your login details by email once approved.";
