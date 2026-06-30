@@ -143,42 +143,58 @@ export const registerVendor = async (req, res) => {
 
 
     console.log("Preparing email transporter...");
-    const transporter = nodmailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL,
-        pass: process.env.E_PASS
-      }
-    });
-console.log("Sending registration email...");
-    // Email is best-effort: a mail failure must NOT fail the registration.
-    try {
-      const info = await transporter.sendMail({
-        from: process.env.EMAIL,
-        to: email,
-        subject: "Vendor Registration",
-        html: `
+const transporter = nodmailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL,
+    pass: process.env.E_PASS,
+  },
+});
 
-          <h1>Hi ${contact_person_name} </h1>
-        <p>🎉 Your vendor registration has been successfully received.</p>
-        <p>Your application is currently under review.</p>
-        <p>We'll notify you via email once the verification process is complete.</p>
-        <p>Thank you for being part of our growing network🚀. 🎉 </p>
-         <p>Warm Regards,<br>
-         Team:VS Arogya </p>
+// =======================
+// RETURN RESPONSE FIRST
+// =======================
 
-        `
-      });
-      console.log("email info is :", info);
-    } catch (mailErr) {
-      console.log("vendor registration email failed:", mailErr?.message);
-    }
+res.status(201).json({
+  success: true,
+  message: "Registration submitted. Approval status will be sent to your email.",
+  pdf_url: gstUpload ? gstUpload.secure_url : null,
+});
 
-    return res.status(201).json({
-      success: true,
-      message: "Registration submitted. Approval status will be sent to your email.",
-      pdf_url: gstUpload ? gstUpload.secure_url : null
-    });
+console.log("Success response sent to Flutter.");
+
+// =======================
+// SEND EMAIL IN BACKGROUND
+// =======================
+
+transporter
+  .sendMail({
+    from: process.env.EMAIL,
+    to: email,
+    subject: "Vendor Registration",
+    html: `
+      <h1>Hi ${contact_person_name}</h1>
+
+      <p>🎉 Your vendor registration has been successfully received.</p>
+
+      <p>Your application is currently under review.</p>
+
+      <p>We'll notify you via email once the verification process is complete.</p>
+
+      <p>Thank you for being part of our growing network 🚀</p>
+
+      <p>Warm Regards,<br>Team VS Arogya</p>
+    `,
+  })
+  .then((info) => {
+    console.log("Registration email sent.");
+    console.log(info.response);
+  })
+  .catch((mailErr) => {
+    console.log("Registration email failed:", mailErr.message);
+  });
+
+return;
   } catch (error) {
     console.log(error);
 console.log("Sending success response to Flutter...");
