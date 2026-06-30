@@ -31,6 +31,7 @@ const vendorSchema = new mongoose.Schema(
     mobile_no: {
       type: String,
       required: true,
+      unique: true,
     },
 
     email: {

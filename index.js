@@ -1,3 +1,8 @@
+import dns from "node:dns";
+// Render's network can't reach Gmail SMTP over IPv6 (ENETUNREACH on :465).
+// Prefer IPv4 so nodemailer connects. Must run before any DNS lookups.
+dns.setDefaultResultOrder("ipv4first");
+
 import express, { urlencoded } from "express";
 import dotenv  from "dotenv" ;
 import cookieParser from "cookie-parser";

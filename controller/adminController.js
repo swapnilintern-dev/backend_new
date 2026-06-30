@@ -58,17 +58,21 @@ export const statusApproval = async (req, res) => {
             }
         });
 
-        await transporter.sendMail({
-            from: process.env.EMAIL,
-            to: pendingVendor.email,
-            subject: "Account Approved",
-            html: `
-            <h2>Registration Approved</h2>
-    <p>Hello ${pendingVendor.contact_person_name},</p>
-    <p>Your account has been approved by the admin. your user id is: ${pendingVendor.mobile_no} & passowrd is: ${pendingVendor.password} ,</p>
-    <p>You can now log in to the application.</p>
-  `
-        });
+        try {
+            await transporter.sendMail({
+                from: process.env.EMAIL,
+                to: pendingVendor.email,
+                subject: "Account Approved",
+                html: `
+                <h2>Registration Approved</h2>
+        <p>Hello ${pendingVendor.contact_person_name},</p>
+        <p>Your account has been approved by the admin. your user id is: ${pendingVendor.mobile_no} & passowrd is: ${pendingVendor.password} ,</p>
+        <p>You can now log in to the application.</p>
+      `
+            });
+        } catch (mailErr) {
+            console.log("approval email failed:", mailErr?.message);
+        }
 
         return res.status(200)
             .json({
@@ -106,17 +110,20 @@ export const rejectApproval = async (req, res) => {
             }
         });
 
-        await transporter.sendMail({
-            from: process.env.EMAIL,
-            to: vendor.email,
-            subject: "Account Rejecte",
-
-            html: `
-    <h2>Registration Rejected</h2>
-    <p>Hello ${vendor.contact_person_name},</p>
-    <p>Your account has been rejected by the admin .</p>
-  `
-        });
+        try {
+            await transporter.sendMail({
+                from: process.env.EMAIL,
+                to: vendor.email,
+                subject: "Account Rejected",
+                html: `
+        <h2>Registration Rejected</h2>
+        <p>Hello ${vendor.contact_person_name},</p>
+        <p>Your account has been rejected by the admin .</p>
+      `
+            });
+        } catch (mailErr) {
+            console.log("rejection email failed:", mailErr?.message);
+        }
 
         return res.status(200)
             .json({
