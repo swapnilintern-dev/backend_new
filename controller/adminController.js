@@ -456,40 +456,5 @@ export const totalSell = async(req , res ) =>{
     }
 }
 
-// export const rejectApproval = async( req , res ) =>{
 
-//     try{
-        
-//         const all_vendors = await Vendor.find(
-//             {
-//                 approvalStatus : "Pending"
-//             }
-//         ) ;
-
-//         if( !all_vendors ) {
-
-//             return res.status( 404 )
-//             .json({
-//                 message :"Vendors not found ",
-//                 success : false 
-//             });
-//         }
-
-//         await all_vendors.
-
- 
-
-//     }
-//     catch(er) {
-
-//         console.log("er is :" , er  ) ;
-
-//         return  res.status( 500)
-//         .json({
-
-//             message :"Internal server eroor ",
-//             success : false 
-//         });
-//     }
-// }
 
