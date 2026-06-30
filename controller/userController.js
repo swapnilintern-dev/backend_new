@@ -167,7 +167,7 @@ console.log("Success response sent to Flutter.");
 // SEND EMAIL IN BACKGROUND
 // =======================
 
-await transporter
+const info = await transporter
   .sendMail({
     from: process.env.EMAIL,
     to: email,
@@ -186,13 +186,7 @@ await transporter
       <p>Warm Regards,<br>Team VS Arogya</p>
     `,
   })
-  .then((info) => {
-    console.log("Registration email sent.");
-    console.log(info.response);
-  })
-  .catch((mailErr) => {
-    console.log("Registration email failed:", mailErr.message);
-  });
+ console.log("Email Info !!" , info);
 
 return;
   } catch (error) {
