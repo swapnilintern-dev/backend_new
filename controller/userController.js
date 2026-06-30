@@ -167,7 +167,7 @@ console.log("Success response sent to Flutter.");
 // SEND EMAIL IN BACKGROUND
 // =======================
 
-transporter
+await transporter
   .sendMail({
     from: process.env.EMAIL,
     to: email,
