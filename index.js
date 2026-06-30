@@ -26,17 +26,17 @@ const port = process.env.PORT || 3000 ;
 
 
 // middlewares 
+app.use(cors(corsOptions)) ;
 app.use( express.json()) ;
 app.use(cookieParser() ) ;
 app.use(urlencoded({ extended: true })) ;
 
 const corsOptions ={
 
-    origin : 'http://localhost:5173',
+    origin : 'http://localhost:50900/',
     credentials : true 
 }
 
-app.use(cors(corsOptions)) ;
 
 // all api 
 app.use('/vsArogya', userRouter ) ;
