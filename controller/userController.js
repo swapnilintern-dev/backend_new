@@ -98,6 +98,7 @@ export const registerVendor = async (req, res) => {
     let autoPassword = Math.floor(1000 + Math.random() * 9000);
 
     console.log("auto generated password is :", autoPassword);
+    console.log("Creating vendor in MongoDB...");
 
     const vendor = await Vendor.create({
       vendor_type,
@@ -138,9 +139,10 @@ export const registerVendor = async (req, res) => {
         },
       }),
     });
+    console.log("Vendor created successfully.");
 
 
-
+    console.log("Preparing email transporter...");
     const transporter = nodmailer.createTransport({
       service: "gmail",
       auth: {
@@ -148,7 +150,7 @@ export const registerVendor = async (req, res) => {
         pass: process.env.E_PASS
       }
     });
-
+console.log("Sending registration email...");
     // Email is best-effort: a mail failure must NOT fail the registration.
     try {
       const info = await transporter.sendMail({
@@ -179,7 +181,7 @@ export const registerVendor = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-
+console.log("Sending success response to Flutter...");
     return res.status(500).json({
       success: false,
       message: error.message,
