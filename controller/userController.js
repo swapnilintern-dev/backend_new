@@ -79,8 +79,6 @@ export const registerVendor = async (req, res) => {
       });
     }
 
-    console.log("auto is :", gstUpload)
-
     // Drug License PDF Upload
     if (drug_lic_copy) {
       const drugUri = getDatauri(drug_lic_copy);
@@ -93,12 +91,10 @@ export const registerVendor = async (req, res) => {
       });
     }
 
-    console.log("raw is:", drugUpload);
-
     let autoPassword = Math.floor(1000 + Math.random() * 9000);
 
     console.log("auto generated password is :", autoPassword);
-    console.log("Creating vendor in MongoDB...");
+
 
     const vendor = await Vendor.create({
       vendor_type,
@@ -140,14 +136,9 @@ export const registerVendor = async (req, res) => {
       }),
     });
 
-    // =======================
-    // RETURN RESPONSE FIRST
-    // =======================
+    console.log("vendor details is:" , vendor ) ;
 
 
-    // =======================
-    // SEND EMAIL IN BACKGROUND
-    // =======================
     const transporter = nodmailer.createTransport({
       service: "gmail",
       auth: {
@@ -156,8 +147,9 @@ export const registerVendor = async (req, res) => {
       },
     });
 
-    const info = await transporter
-      .sendMail({
+    console.log( "email is :" , email ) ;
+
+    const info = await transporter.sendMail({
         from: process.env.EMAIL,
         to: email,
         subject: "Vendor Registration",
@@ -190,6 +182,10 @@ export const registerVendor = async (req, res) => {
     .json({
       message :"sumitted ", success : true 
     }) ;
+
+
+
+
   } catch (error) {
     console.log(error);
     console.log("Sending success response to Flutter...");
