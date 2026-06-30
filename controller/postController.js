@@ -180,7 +180,7 @@ export const getAllProducts =async(req , res ) =>{
         }) ;
 
         return res.status(200)
-        .json({
+        .json({ 
             message :"all products are fetched successfully ",
             success : true ,
             products

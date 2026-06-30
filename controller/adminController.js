@@ -11,16 +11,9 @@ const approvalneedUser = async (req, res) => {
             approvalStatus: "Pending"
         });
 
-        if (pendingUser.length === 0) {
-            return res.status(401)
-                .json({
-                    message: "User not found ",
-                    success: false
-                });
-        }
-
         console.log(" pending user ", pendingUser);
 
+        // Empty list is not an error — let the admin screen show "no requests".
         return res.status(200)
             .json({
                 message: "vendor fetched ",
@@ -70,7 +63,7 @@ export const statusApproval = async (req, res) => {
             to: pendingVendor.email,
             subject: "Account Approved",
             html: `
-    <h2>Registration Approved</h2>
+            <h2>Registration Approved</h2>
     <p>Hello ${pendingVendor.contact_person_name},</p>
     <p>Your account has been approved by the admin. your user id is: ${pendingVendor.mobile_no} & passowrd is: ${pendingVendor.password} ,</p>
     <p>You can now log in to the application.</p>
@@ -95,7 +88,7 @@ export const rejectApproval = async (req, res) => {
 
         const vendor = await Vendor.findById(vendor_id);
 
-        if (!vendors)
+        if (!vendor)
             return res.status(401)
                 .json({
                     message: "Vendor not found ",
@@ -120,10 +113,16 @@ export const rejectApproval = async (req, res) => {
 
             html: `
     <h2>Registration Rejected</h2>
-    <p>Hello ${pendingVendor.contact_person_name},</p>
-    <p>Your account has been rejected by the admin .</p>  
+    <p>Hello ${vendor.contact_person_name},</p>
+    <p>Your account has been rejected by the admin .</p>
   `
-        })
+        });
+
+        return res.status(200)
+            .json({
+                message: "Vendor rejected",
+                success: true
+            });
     }
     catch (er) {
         console.log("error from reject Approval ", er);
@@ -140,7 +139,10 @@ export const getAllOrder = async (req, res) => {
 
     try {
 
-        const allOrders = await order.find();
+        const allOrders = await order.find()
+            .populate("user")
+            .populate("orderItems.product")
+            .sort({ createdAt: -1 });
 
         if (!allOrders) {
             return res.status(401)
@@ -222,10 +224,10 @@ export const confirmOrder = async (req, res) => {
         const confirm_order = await order.findById(order_id);
 
         if (!confirm_order) {
-            return res.status(401)
+            return res.status(404)
                 .json({
-                    message: "Product not found ",
-                    success: true
+                    message: "Order not found ",
+                    success: false
                 });
         }
 
@@ -233,11 +235,11 @@ export const confirmOrder = async (req, res) => {
 
         await confirm_order.save();
 
-        return res.status(201)
+        return res.status(200)
             .json({
 
                 message: "order confirmed ",
-                success: false
+                success: true
             });
 
     }
@@ -446,4 +448,41 @@ export const totalSell = async(req , res ) =>{
         }) ;
     }
 }
+
+// export const rejectApproval = async( req , res ) =>{
+
+//     try{
+        
+//         const all_vendors = await Vendor.find(
+//             {
+//                 approvalStatus : "Pending"
+//             }
+//         ) ;
+
+//         if( !all_vendors ) {
+
+//             return res.status( 404 )
+//             .json({
+//                 message :"Vendors not found ",
+//                 success : false 
+//             });
+//         }
+
+//         await all_vendors.
+
+ 
+
+//     }
+//     catch(er) {
+
+//         console.log("er is :" , er  ) ;
+
+//         return  res.status( 500)
+//         .json({
+
+//             message :"Internal server eroor ",
+//             success : false 
+//         });
+//     }
+// }
 

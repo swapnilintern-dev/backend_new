@@ -1,10 +1,11 @@
 import express from "express";
-import approvalneedUser, { confirmOrder, deliveredOrder, getAllActiveVendor, getAllOrder, getallVendors, getSingleOrder, outofDelivery, shippedOrder, statusApproval, totalSell  } from "../controller/adminController.js";
+import approvalneedUser, { confirmOrder, deliveredOrder, getAllActiveVendor, getAllOrder, getallVendors, getSingleOrder, outofDelivery, rejectApproval, shippedOrder, statusApproval, totalSell  } from "../controller/adminController.js";
 
 const router = express.Router() ;
 
 router.get("/pending-vendor" , approvalneedUser) ;
 router.put("/approval-mail/:id" , statusApproval ) ;
+router.put("/reject-vendor/:id" , rejectApproval ) ;
 router.get("/all-orders" , getAllOrder ) ;
 
 router.get("/single-order/:id" , getSingleOrder ) ;

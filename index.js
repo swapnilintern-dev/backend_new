@@ -10,6 +10,7 @@ import orderRouter from "./routes/orderRoute.js" ;
 import adminRouter from "./routes/adminRoute.js" ;
 import paymentRouter from "./routes/paymentRoute.js"
 import bannerRouter from "./routes/bannerRoute.js" ;
+import couponRouter from "./routes/couponRoute.js" ;
 
 const app = express() ;
 
@@ -23,13 +24,14 @@ const port = process.env.PORT || 3000 ;
 app.use( express.json()) ;
 app.use(cookieParser() ) ;
 app.use(urlencoded({ extended: true })) ;
-//CHANGED
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-  })
-);
+
+const corsOptions ={
+
+    origin : 'http://localhost:5173',
+    credentials : true 
+}
+
+app.use(cors(corsOptions)) ;
 
 // all api 
 app.use('/vsArogya', userRouter ) ;
@@ -39,11 +41,12 @@ app.use('/vsArogya' , orderRouter ) ;
 app.use('/vsArogya' , adminRouter ) ;
 app.use('/vsArogya' , paymentRouter ) ;
 app.use('/vsArogya' , bannerRouter ) ;
+app.use('/vsArogya' , couponRouter ) ;
 
 
 
 app.get('/' , (req , res ) =>{
-    res.send("<h1> This is from Client side </h1>") ;
+    res.send("<h1> This is from server side </h1>") ;
 })
 
 app.listen(port , () =>{ 

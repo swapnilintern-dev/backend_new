@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
 
 const vendorSchema = new mongoose.Schema(
-  { 
-    role:{
-      type :String ,
-    },
+  {
 
+    role: {
+      type: String,
+    },
     vendor_type: {
       type: String,
       required: true,
@@ -76,14 +76,14 @@ const vendorSchema = new mongoose.Schema(
 
     password: {
       type: String
-    //   required: true,
+      //   required: true,
     },
 
- gst_pdf: {
-  url: String,
-  publicId: String,
-  fileName: String,
-},
+    gst_pdf: {
+      url: String,
+      publicId: String,
+      fileName: String,
+    },
 
     store_pic: {
       url: String,
@@ -93,36 +93,36 @@ const vendorSchema = new mongoose.Schema(
     drug_lic_copy: {
       url: String,
       publicId: String,
-      fileName :String ,
+      fileName: String,
     },
 
-    cart:[
+    cart: [
       {
-        product :{
-          type : mongoose.Schema.Types.ObjectId ,
-          ref:"product"
+        product: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "product"
         },
 
-        quantity:{
-          type : Number ,
-          default : 1 
+        quantity: {
+          type: Number,
+          default: 1
         }
       }
     ],
-    
-  approvalStatus:{
-    type: String,
-    enum: ["Pending", "Approved", "Rejected"],
-    default: "Pending"
-}
+
+    approvalStatus: {
+      type: String,
+      enum: ["Pending", "Approved", "Rejected"],
+      default: "Pending"
+    }
   },
   {
     timestamps: true,
   }
 );
 
-const Vendor =  mongoose.model("Vendor", vendorSchema);
-export default Vendor ;
+const Vendor = mongoose.model("Vendor", vendorSchema);
+export default Vendor;
 
 
 
