@@ -49,16 +49,24 @@ export const placeOrder = async( req , res ) => {
 
        })) ;
 
-       const coupun = await Coupon.find({
+       const coupan = await Coupon.find({
 
         coupan_discount : coupan_discount 
 
        });
 
-       const  discount_no = coupan_discount[coupan_discount.length-2] + coupan_discount[coupan_discount.length-1] ;
+       if( !coupan ){
+        return res.status(404)
+        .json({
+            message :"Coupan not found ",
+            success : false 
+        });
+       }
+
+       const  discount_no = coupan.coupan_discount[coupan_discount.length-2] + coupan.coupan_discount[coupan_discount.length-1] ;
        
        console.log("discount coupan is :" , discount_no ) ;
-       
+
        const totalAmount = user.cart.reduce( (total , item ) => 
 
         total + item.product.price * item.quantity , 0 
