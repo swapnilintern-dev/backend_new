@@ -82,6 +82,11 @@ const orderSchema = new mongoose.Schema({
         enum: ["Pending", "Confirm Order", "Shipped", "Out for Delivery", "Delivered", "Cancelled"],
         default: "Pending"
     },
+    coupan_discount :{
+        type :String ,
+        default:"NAR00"
+    },
+
 
     deliveredAt: {
         type: Date

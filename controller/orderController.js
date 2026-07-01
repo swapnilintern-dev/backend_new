@@ -14,7 +14,8 @@ export const placeOrder = async( req , res ) => {
             state ,
             pincode ,
             country,
-            phoneNo
+            phoneNo ,
+            coupan_discount 
         } = req.body ;
 
          
@@ -48,10 +49,22 @@ export const placeOrder = async( req , res ) => {
 
        })) ;
 
+       const coupun = await Coupon.find({
+
+        coupan_discount : coupan_discount 
+
+       });
+
+       const  discount_no = coupan_discount[coupan_discount.length-2] + coupan_discount[coupan_discount.length-1] ;
+       
+       console.log("discount coupan is :" , discount_no ) ;
+       
        const totalAmount = user.cart.reduce( (total , item ) => 
 
         total + item.product.price * item.quantity , 0 
-    )
+    );
+
+    totalAmount = totalAmount *0.12 ;
        
       const Order = await order.create({
 
@@ -65,6 +78,7 @@ export const placeOrder = async( req , res ) => {
             country ,
             phoneNo 
         },
+        coupan_discount, 
         totalAmount,
       }) ;
 
