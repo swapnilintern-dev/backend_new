@@ -51,41 +51,28 @@ export const placeOrder = async( req , res ) => {
        })) ;
 
 
-       const discount_no = 0 ;
-        
+       // Subtotal from the cart (price x quantity).
+       const subtotal = user.cart.reduce(
+         (total, item) => total + item.product.price * item.quantity, 0
+       );
 
-              if( coupan_discount) {
-
-       const coupon = await Coupon.findOne({
-        coupan_discount : code 
-       }) ;
-       
-
-
-       if( !coupon ){
-        return res.status(404)
-        .json({
-            message :"Coupon not found ",
-            success : false 
-        });
+       // Coupon discount: percentOff of subtotal, capped by maxDiscount.
+       let discountAmount = 0;
+       if (coupan_discount) {
+         const coupon = await Coupon.findOne({ code: coupan_discount, active: true });
+         if (coupon) {
+           discountAmount = (subtotal * coupon.percentOff) / 100;
+           if (coupon.maxDiscount && discountAmount > coupon.maxDiscount) {
+             discountAmount = coupon.maxDiscount;
+           }
+         }
+         console.log("coupon discount is :", discountAmount);
        }
 
-        discount_no = coupon.percentOff ;
-       
-       console.log("discount coupan is :" , discount_no ) ;
-   
-    } 
-       const totalAmount = user.cart.reduce( (total , item ) => 
+       // 12% GST on the subtotal. Delivery is FREE (no delivery fee).
+       const gst = subtotal * 0.12;
+       const totalAmount = Math.round((subtotal + gst - discountAmount) * 100) / 100;
 
-        total + item.product.price * item.quantity , 0 
-    );
-
-    totalAmount = totalAmount *0.12 ;
-    // totalAmount = totalAmount
-
-    if( discount_no > 0 ) {
-        totalAmount = totalAmount * discount_no ;
-    }      
       const Order = await order.create({
 
         user : userId ,
@@ -96,9 +83,9 @@ export const placeOrder = async( req , res ) => {
             state ,
             pincode ,
             country ,
-            phoneNo 
+            phoneNo
         },
-        coupan_discount, 
+        coupan_discount,
         totalAmount,
       }) ;
 
