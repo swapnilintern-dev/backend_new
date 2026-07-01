@@ -109,8 +109,6 @@ export const rejectApproval = async (req, res) => {
                 pass: process.env.E_PASS
             }
         });
-
-        try {
             await transporter.sendMail({
                 from: process.env.EMAIL,
                 to: vendor.email,
@@ -121,17 +119,14 @@ export const rejectApproval = async (req, res) => {
         <p>Your account has been rejected by the admin .</p>
       `
             });
-        } catch (mailErr) {
-            console.log("rejection email failed:", mailErr?.message);
-        }
 
         return res.status(200)
             .json({
                 message: "Vendor rejected",
                 success: true
             });
-    }
-    catch (er) {
+
+        }catch (er) {
         console.log("error from reject Approval ", er);
 
         return res.status(500)
@@ -141,7 +136,6 @@ export const rejectApproval = async (req, res) => {
             });
     }
 }
-
 export const getAllOrder = async (req, res) => {
 
     try {
