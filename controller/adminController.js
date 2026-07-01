@@ -377,9 +377,9 @@ export const getallVendors = async (req, res) => {
 
     try {
 
-        const all_vendors= await Vendor.find() ;
+        const all_vendors = await Vendor.find() ;
 
-        if( ! all_vendors )
+        if( all_vendors.length == 0 )
             return res.status(402)
         .json({
             message :"Vendors are missing" ,
@@ -396,6 +396,12 @@ export const getallVendors = async (req, res) => {
     catch (er) {
 
         console.log(" error from allVendor", er);
+        return res.status(500)
+        .json({
+
+            message :"Internal server error ",
+            success : false 
+        }) ;
 
     }
 }
@@ -403,21 +409,36 @@ export const getallVendors = async (req, res) => {
 export const getAllActiveVendor = async( req , res ) =>{
 
     try{
-         
+
          const active_vendor = await Vendor.find({
-            approvalStatus : "Approved" 
+            approvalStatus : "Approved"
          });
 
-         console.log(active_vendor ) ;
+
+         if( active_vendor.length == 0 )
+            return res.status(404)
+            .json({
+                message :"active vendors are not found ",
+                success : false 
+            }) ;
+
+
+         return res.status(200)
+         .json({
+            message :"active vendors fetched successfully " ,
+            success : true ,
+            count : active_vendor.length ,
+            active_vendor
+         });
     }
     catch(er){
 
         console.log("error from get all acitvevendor " , er ) ;
-        
+
         return res.status(500)
-        .json({ 
+        .json({
             message :"Internal Server error " ,
-            success : false 
+            success : false
         });
     }
 }
@@ -428,20 +449,27 @@ export const totalSell = async(req , res ) =>{
         const all_orders = await order.aggregate([
             {
                 $match :{
-                    orderStatus:"Delivered" 
+                    orderStatus:"Delivered"
                 },
-            }, 
+            },
             {   $group :{
                     _id:null ,
-                    totalRevenue :{ $sum : "$totalAmount" } 
+                    totalRevenue :{ $sum : "$totalAmount" } ,
+                    count :{ $sum : 1 }
                 }
             }
         ]);
+
+        const totalRevenue = all_orders.length > 0 ? all_orders[0].totalRevenue : 0 ;
+        const deliveredCount = all_orders.length > 0 ? all_orders[0].count : 0 ;
+
         return res.status(200)
         .json({
             message :"Total revenue fetched successfully " ,
-            succss : true ,
-            all_orders  
+            success : true ,
+            totalRevenue ,
+            deliveredCount ,
+            all_orders
         });
         
     }
