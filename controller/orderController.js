@@ -49,11 +49,19 @@ export const placeOrder = async( req , res ) => {
         orderPrice : item.product.price 
 
        })) ;
+
+
+       const discount_no = 0 ;
         
+
+              if( coupan_discount) {
+
        const coupon = await Coupon.findOne({
         coupan_discount : code 
        }) ;
        
+
+
        if( !coupon ){
         return res.status(404)
         .json({
@@ -62,17 +70,22 @@ export const placeOrder = async( req , res ) => {
         });
        }
 
-       const  discount_no = coupon.percentOff ;
+        discount_no = coupon.percentOff ;
        
        console.log("discount coupan is :" , discount_no ) ;
-
+   
+    } 
        const totalAmount = user.cart.reduce( (total , item ) => 
 
         total + item.product.price * item.quantity , 0 
     );
 
     totalAmount = totalAmount *0.12 ;
-       
+    // totalAmount = totalAmount
+
+    if( discount_no > 0 ) {
+        totalAmount = totalAmount * discount_no ;
+    }      
       const Order = await order.create({
 
         user : userId ,
