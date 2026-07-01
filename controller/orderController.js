@@ -1,3 +1,4 @@
+import Coupon from "../model/couponModel.js";
 import order from "../model/orderModel.js";
 import product from "../model/productModel.js";
 // import product from "../model/productModel.js";
@@ -48,22 +49,20 @@ export const placeOrder = async( req , res ) => {
         orderPrice : item.product.price 
 
        })) ;
-
-       const coupan = await Coupon.find({
-
-        coupan_discount : coupan_discount 
-
-       });
-
-       if( !coupan ){
+        
+       const coupon = await Coupon.findOne({
+        coupan_discount : code 
+       }) ;
+       
+       if( !coupon ){
         return res.status(404)
         .json({
-            message :"Coupan not found ",
+            message :"Coupon not found ",
             success : false 
         });
        }
 
-       const  discount_no = coupan.coupan_discount[coupan_discount.length-2] + coupan.coupan_discount[coupan_discount.length-1] ;
+       const  discount_no = coupon.percentOff ;
        
        console.log("discount coupan is :" , discount_no ) ;
 
