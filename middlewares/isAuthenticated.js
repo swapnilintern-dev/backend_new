@@ -2,7 +2,11 @@ import jwt from "jsonwebtoken";
 
 const isAuthenticated = async (req, res, next) => {
     try {
-        const token = req.cookies.token;
+        // Accept the JWT from either the cookie (mobile) or the
+        // Authorization: Bearer header (web + mobile — the reliable path).
+        const bearer = req.headers.authorization;
+        const token = req.cookies.token ||
+            (bearer && bearer.startsWith("Bearer ") ? bearer.split(" ")[1] : null);
 
         if (!token) {
             return res.status(401).json({

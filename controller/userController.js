@@ -256,7 +256,8 @@ export const login = async (req, res) => {
       .json({
         message: "Login success ",
         success: true,
-        role: user.role
+        role: user.role,
+        token
       });
 
   }
