@@ -58,21 +58,17 @@ export const statusApproval = async (req, res) => {
             }
         });
 
-        try {
-            await transporter.sendMail({
-                from: process.env.EMAIL,
-                to: pendingVendor.email,
-                subject: "Account Approved",
-                html: `
+        await transporter.sendMail({
+            from: process.env.EMAIL,
+            to: pendingVendor.email,
+            subject: "Account Approved",
+            html: `
                 <h2>Registration Approved</h2>
         <p>Hello ${pendingVendor.contact_person_name},</p>
         <p>Your account has been approved by the admin. your user id is: ${pendingVendor.mobile_no} & passowrd is: ${pendingVendor.password} ,</p>
         <p>You can now log in to the application.</p>
       `
-            });
-        } catch (mailErr) {
-            console.log("approval email failed:", mailErr?.message);
-        }
+        });
 
         return res.status(200)
             .json({
@@ -109,16 +105,16 @@ export const rejectApproval = async (req, res) => {
                 pass: process.env.E_PASS
             }
         });
-            await transporter.sendMail({
-                from: process.env.EMAIL,
-                to: vendor.email,
-                subject: "Account Rejected",
-                html: `
+        await transporter.sendMail({
+            from: process.env.EMAIL,
+            to: vendor.email,
+            subject: "Account Rejected",
+            html: `
         <h2>Registration Rejected</h2>
         <p>Hello ${vendor.contact_person_name},</p>
         <p>Your account has been rejected by the admin .</p>
       `
-            });
+        });
 
         return res.status(200)
             .json({
@@ -126,7 +122,7 @@ export const rejectApproval = async (req, res) => {
                 success: true
             });
 
-        }catch (er) {
+    } catch (er) {
         console.log("error from reject Approval ", er);
 
         return res.status(500)
@@ -371,110 +367,111 @@ export const getallVendors = async (req, res) => {
 
     try {
 
-        const all_vendors = await Vendor.find() ;
+        const all_vendors = await Vendor.find();
 
-        if( all_vendors.length == 0 )
+        if (all_vendors.length == 0)
             return res.status(402)
-        .json({
-            message :"Vendors are missing" ,
-            success : false 
-        });
+                .json({
+                    message: "Vendors are missing",
+                    success: false
+                });
 
         return res.status(201)
-        .json({
-            message :"all vendors are fetched successfully " ,
-            success : true ,
-            all_vendors  
-        }) ;
+            .json({
+                message: "all vendors are fetched successfully ",
+                success: true,
+                all_vendors
+            });
     }
     catch (er) {
 
         console.log(" error from allVendor", er);
         return res.status(500)
-        .json({
+            .json({
 
-            message :"Internal server error ",
-            success : false 
-        }) ;
+                message: "Internal server error ",
+                success: false
+            });
 
     }
 }
 
-export const getAllActiveVendor = async( req , res ) =>{
+export const getAllActiveVendor = async (req, res) => {
 
-    try{
+    try {
 
-         const active_vendor = await Vendor.find({
-            approvalStatus : "Approved"
-         });
+        const active_vendor = await Vendor.find({
+            approvalStatus: "Approved"
+        });
 
 
-         if( active_vendor.length == 0 )
+        if (active_vendor.length == 0)
             return res.status(404)
+                .json({
+                    message: "active vendors are not found ",
+                    success: false
+                });
+
+
+        return res.status(200)
             .json({
-                message :"active vendors are not found ",
-                success : false 
-            }) ;
-
-
-         return res.status(200)
-         .json({
-            message :"active vendors fetched successfully " ,
-            success : true ,
-            count : active_vendor.length ,
-            active_vendor
-         });
+                message: "active vendors fetched successfully ",
+                success: true,
+                count: active_vendor.length,
+                active_vendor
+            });
     }
-    catch(er){
+    catch (er) {
 
-        console.log("error from get all acitvevendor " , er ) ;
+        console.log("error from get all acitvevendor ", er);
 
         return res.status(500)
-        .json({
-            message :"Internal Server error " ,
-            success : false
-        });
+            .json({
+                message: "Internal Server error ",
+                success: false
+            });
     }
 }
 
-export const totalSell = async(req , res ) =>{
+export const totalSell = async (req, res) => {
 
-    try{
+    try {
         const all_orders = await order.aggregate([
             {
-                $match :{
-                    orderStatus:"Delivered"
+                $match: {
+                    orderStatus: "Delivered"
                 },
             },
-            {   $group :{
-                    _id:null ,
-                    totalRevenue :{ $sum : "$totalAmount" } ,
-                    count :{ $sum : 1 }
+            {
+                $group: {
+                    _id: null,
+                    totalRevenue: { $sum: "$totalAmount" },
+                    count: { $sum: 1 }
                 }
             }
         ]);
 
-        const totalRevenue = all_orders.length > 0 ? all_orders[0].totalRevenue : 0 ;
-        const deliveredCount = all_orders.length > 0 ? all_orders[0].count : 0 ;
+        const totalRevenue = all_orders.length > 0 ? all_orders[0].totalRevenue : 0;
+        const deliveredCount = all_orders.length > 0 ? all_orders[0].count : 0;
 
         return res.status(200)
-        .json({
-            message :"Total revenue fetched successfully " ,
-            success : true ,
-            totalRevenue ,
-            deliveredCount ,
-            all_orders
-        });
-        
-    }
-    catch(er){
-        console.log(" error from total sell" , er );
-        return res.status(500)
-        .json({
+            .json({
+                message: "Total revenue fetched successfully ",
+                success: true,
+                totalRevenue,
+                deliveredCount,
+                all_orders
+            });
 
-            message :"Internal server error " ,
-            success : false 
-        }) ;
+    }
+    catch (er) {
+        console.log(" error from total sell", er);
+        return res.status(500)
+            .json({
+
+                message: "Internal server error ",
+                success: false
+            });
     }
 }
 

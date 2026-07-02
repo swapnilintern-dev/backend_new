@@ -56,8 +56,8 @@ const createPayment = async (req, res) => {
             const pay_create = await razorpay.orders.create(options);
 
             order_details.paymentInfo = {
-
-                razorpay_orderId: pay_create.id
+                razorpay_orderId: pay_create.id,
+                status: "Pending"
             };
 
             order_details.paymentMethod = "ONLINE";
@@ -72,7 +72,8 @@ const createPayment = async (req, res) => {
                     razorpayOrderId: pay_create.id,
                     amount: pay_create.amount,
                     currency: pay_create.currency,
-                    orderId: order_details._id
+                    orderId: order_details._id,
+                    razorpayKeyId: process.env.RAZORPAY_KEY_ID
                 });
         }
     }
@@ -99,62 +100,54 @@ export const verifyPayment = async (req, res) => {
             razorpay_signature,
         } = req.body;
 
-        const generatedSignature = crypto
-            .createHmac(
-                "sha256",
-                process.env.RAZORPAY_KEY_SECRET
-            )
-            .update(
-                razorpay_order_id + "|" + razorpay_payment_id
-            )
-            .digest("hex");
-
-        const isValid =
-            generatedSignature === razorpay_signature;
-
-        if (!isValid) {
-            return res.status(400)
-                .json({
-
-                    message: "Payment not secure ",
-                    success: false
-                });
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing payment fields",
+            });
         }
 
-        const order = await Order.findOne({
-            "paymentInfo.raz_orderId": razorpay_order_id,
+        // Recreate the signature from order_id|payment_id and compare — this is
+        // what proves the callback really came from Razorpay and wasn't forged.
+        const generatedSignature = crypto
+            .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+            .update(razorpay_order_id + "|" + razorpay_payment_id)
+            .digest("hex");
+
+        if (generatedSignature !== razorpay_signature) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment verification failed",
+            });
+        }
+
+        // Match the app order by the Razorpay order id stored at create time.
+        const orderDoc = await order.findOne({
+            "paymentInfo.razorpay_orderId": razorpay_order_id,
         });
 
-        if (!order) {
+        if (!orderDoc) {
             return res.status(404).json({
                 success: false,
                 message: "Order not found",
             });
         }
 
-        order.paymentInfo.raz_id =
-            razorpay_payment_id;
+        orderDoc.paymentInfo.razorpay_id = razorpay_payment_id;
+        orderDoc.paymentInfo.razorpay_signature = razorpay_signature;
+        orderDoc.paymentInfo.status = "Completed";
+        orderDoc.paymentMethod = "ONLINE";
+        orderDoc.paidAt = new Date();
 
-        order.paymentInfo.raz_signature =
-            razorpay_signature;
-
-        order.paymentInfo.status =
-            "Completed";
-
-        order.paidAt = new Date();
-
-        await order.save();
+        await orderDoc.save();
 
         return res.status(200).json({
             success: true,
             message: "Payment verified successfully",
-            order,
         });
 
     } catch (error) {
-
-        console.log("error from verify signature :", error);
-
+        console.log("verifyPayment error:", error);
         return res.status(500).json({
             success: false,
             message: error.message,
