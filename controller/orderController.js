@@ -69,8 +69,10 @@ export const placeOrder = async( req , res ) => {
          console.log("coupon discount is :", discountAmount);
        }
 
-       // 12% GST on the subtotal. Delivery is FREE (no delivery fee).
-       const gst = subtotal * 0.12;
+       // 12% GST on the DISCOUNTED subtotal, so the amount charged equals the
+       // amount the app shows at checkout ((subtotal - discount) * 0.12).
+       // Delivery is FREE (no delivery fee).
+       const gst = (subtotal - discountAmount) * 0.12;
        const totalAmount = Math.round((subtotal + gst - discountAmount) * 100) / 100;
 
       const Order = await order.create({

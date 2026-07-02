@@ -48,7 +48,9 @@ const createPayment = async (req, res) => {
         else {
 
             const options = {
-                amount: totalAmount * 100,
+                // Razorpay needs an INTEGER paise amount — round to avoid
+                // floating-point values like 12344.9999 that get rejected.
+                amount: Math.round(totalAmount * 100),
                 currency: "INR",
                 receipt: `order_${order_details._id}`
             }
@@ -130,6 +132,23 @@ export const verifyPayment = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "Order not found",
+            });
+        }
+
+        // The order must belong to the caller (defence-in-depth alongside the
+        // signature check).
+        if (orderDoc.user.toString() !== req.id) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized",
+            });
+        }
+
+        // Idempotent: if it's already marked paid, don't double-process.
+        if (orderDoc.paymentInfo && orderDoc.paymentInfo.status === "Completed") {
+            return res.status(200).json({
+                success: true,
+                message: "Payment already verified",
             });
         }
 
