@@ -25,6 +25,9 @@ const productSchema = new mongoose.Schema({
     },
 
     // --- Inventory / display fields (managed by the marketing team) ---
+    
+    batch_no:String ,
+    exp_date :Date,
     mrp: { type: Number },
     brand: { type: String, default: "" },
     code: { type: String, default: "" },
