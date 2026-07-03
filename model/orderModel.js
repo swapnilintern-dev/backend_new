@@ -82,11 +82,14 @@ const orderSchema = new mongoose.Schema({
         enum: ["Pending", "Confirm Order", "Shipped", "Out for Delivery", "Delivered", "Cancelled"],
         default: "Pending"
     },
-    coupan_discount :{
-        type :String ,
-        default:"NAR00"
+    coupan_discount: {
+        type: String,
+        default: "NAR00"
     },
 
+    deliveryAgent: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },
+    deliveryOtp: { type: String },
+    deliveryProof: { url: String, publicId: String },
 
     deliveredAt: {
         type: Date

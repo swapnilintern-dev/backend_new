@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Template </title>
+    <style>
+        :root {
+            --primary-color: #43b09d;
+            --primary-light: #e6f6f3;
+            --text-dark: #333333;
+            --text-muted: #555555;
+            --border-color: #cccccc;
+            --accent-red: #d9534f;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11px;
+            color: var(--text-dark);
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .invoice-card {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Header Section */
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .logo {
+            width: 130px;
+            height: 130px;
+            overflow: clip;
+            object-fit: cover;
+            display: flex;
+            justify-content: center;
+
+
+        }
+
+        .stampded {
+            width: 100px;
+            height: 100px;
+            overflow: clip;
+            object-fit: cover;
+            object-position: center;
+            display: flex;
+            position: relative;
+            top: -20px;
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-placeholder {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 2px solid var(--primary-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: var(--primary-color);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .logo-text {
+            font-size: 10px;
+            color: var(--primary-color);
+            font-weight: bold;
+            line-height: 1.2;
+        }
+
+        .vendor-details {
+            text-align: right;
+            font-size: 10px;
+            /* color: var(--text-muted); */
+            color: #2e7d32;
+            line-height: 1.4;
+        }
+
+        .vendor-name {
+            font-size: 16px;
+            font-weight: bold;
+            /* color: var(--primary-color); */
+            color: #2e7d32;
+            margin-bottom: 3px;
+        }
+
+        /* Billing / Shipping Box */
+        .client-box {
+            border: 2px solid var(--primary-color);
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .client-name {
+            font-size: 13px;
+            font-weight: bold;
+            color: #111;
+            margin-bottom: 3px;
+        }
+
+        /* Invoice Meta Info Grid */
+        .meta-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border: 2px solid var(--accent-red);
+            background-color: #fff9f9;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 15px;
+        }
+
+        .meta-column-right {
+            text-align: right;
+        }
+
+        .meta-row {
+            margin-bottom: 3px;
+        }
+
+        .meta-row:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Main Items Table */
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0;
+        }
+
+        .items-table th {
+            background-color: var(--primary-color);
+            color: #ffffff;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 10px;
+            padding: 6px 4px;
+            border: 1px solid #ffffff;
+            text-align: center;
+        }
+
+        .items-table td {
+            padding: 8px 4px;
+            border-left: 1px solid var(--primary-color);
+            border-right: 1px solid var(--primary-color);
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .items-table tr.item-row {
+            border-bottom: 1px solid var(--primary-color);
+        }
+
+        .items-table td.left-align {
+            text-align: left;
+            padding-left: 8px;
+        }
+
+        .batch-expiry-row {
+            background-color: var(--primary-light);
+            font-size: 10px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--primary-color);
+        }
+
+        .batch-expiry-row td {
+            padding: 4px 8px;
+        }
+
+        /* Summary Bar */
+
+        /* Table container and layout definition */
+        .invoice-summary-table {
+            width: 100%;
+            max-width: 900px;
+            /* Fixed maximum width */
+            border-collapse: collapse;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+            font-weight: 600;
+            background-color: #B2DBD5;
+            /* Exact pastel teal tone */
+            color: #4A4A4A;
+            font-size: 15px;
+            margin: 12px auto;
+            table-layout: fixed;
+            /* Strictly equal column distribution */
+        }
+
+        /* Styling for the thin inner borders */
+        .invoice-summary-table td {
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            padding: 12px 20px;
+            height: 50px;
+            vertical-align: middle;
+            box-sizing: border-box;
+            width: 33.33%;
+            /* Equal width for all columns */
+        }
+
+        /* All columns are now perfectly centered */
+        .col-item {
+            text-align: center;
+        }
+
+        .col-qty {
+            text-align: center;
+        }
+
+        .col-total {
+            text-align: center;
+            /* Pure block ko cell ke center me lane ke liye */
+        }
+
+        /* Centered layout for label and amount inside the third column */
+        .flex-total-container {
+            display: inline-flex;
+            /* Center alignment maintain rakhne ke liye inline-flex kiya */
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            /* Label aur amount ke bich ka gap */
+        }
+
+        .total-label {
+            font-size: 13px;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            /* Text ko ek hi line me rakhega */
+            text-align: right;
+        }
+
+        .total-amount {
+            font-size: 16px;
+            min-width: 75px;
+            display: inline-block;
+            text-align: left;
+            /* Numbers ek line me sahi dikhein */
+        }
+
+        /* Total Ribbon */
+        .total-ribbon {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--primary-color);
+            color: #ffffff;
+            font-weight: bold;
+            padding: 8px 12px;
+            margin-top: 10px;
+            border-radius: 2px;
+        }
+
+        .words-amount {
+            font-style: italic;
+            font-size: 12px;
+        }
+
+        .numeric-amount {
+            font-size: 14px;
+        }
+
+        /* Tax and Bottom Section Split */
+        .bottom-split {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            align-items: flex-start;
+        }
+
+
+        .tax-summary-table {
+            border-collapse: collapse;
+            font-size: 10px;
+            text-align: center;
+            width: 220px;
+        }
+
+        .tax-summary-table th {
+            background-color: #cccccc;
+            color: #333;
+            font-weight: 600;
+            padding: 3px;
+            border: 1px solid #aaaaaa;
+        }
+
+        .tax-summary-table td {
+            padding: 5px;
+            border: 1px solid #aaaaaa;
+        }
+
+        .gst-totals {
+            text-align: right;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        /* Footer Terms and Bank Info */
+        .footer-divider {
+            margin: 20px 0 15px 0;
+            border: 0;
+            border-top: 1px solid var(--primary-color);
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 1.20fr 1fr 0.8fr;
+            gap: 15px;
+        }
+
+        .section-title {
+            color: #2e7d32;
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 11px;
+        }
+
+        .terms-text {
+            font-size: 9px;
+            color: var(--text-muted);
+            line-height: 1.3;
+            list-style-type: decimal;
+            padding-left: 12px;
+        }
+
+        .bank-details {
+            font-size: 9px;
+            line-height: 1.3;
+            color: var(--text-dark);
+        }
+
+        .qr-placeholder {
+            width: 100px;
+            height: 100px;
+            /* border: 1px solid #ccc; */
+            margin-top: 5px;
+            display: flex;
+
+            overflow: clip;
+            object-fit: cover;
+            object-position: center;
+            /* justify-content: center;
+            align-items: center; */
+            background-color: #fafafa;
+        }
+
+        .signature-area {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            height: 100%;
+            padding-top: 20px;
+        }
+
+        .stamp-placeholder {
+            width: 50px;
+            height: 50px;
+            border: 2px dashed #0044cc;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #0044cc;
+            font-weight: bold;
+            font-size: 8px;
+            margin-bottom: 15px;
+            opacity: 0.7;
+        }
+
+        .sig-line {
+            border-top: 1px solid #777777;
+            width: 100%;
+            padding-top: 4px;
+            font-size: 10px;
+        }
+
+        .customer-care-bar {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 10px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--primary-color);
+            padding-top: 8px;
+        }
+
+
+
+        /* Sub-sections inside the split column */
+        .sub-row {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        /* Horizontal border between G.Total and Roundoff */
+        .g-total {
+            border-bottom: 2px solid #f6f2f2ed;
+        }
+
+        /* Print styling rules */
+        @media print {
+            body {
+                background-color: #ffffff;
+                padding: 0;
+            }
+
+            .invoice-card {
+                border: none;
+                box-shadow: none;
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="invoice-card">
+
+        <div class="header-container">
+            <div class="logo-area">
+
+                <div class="logo">
+                    <!-- <img src="../assets/logo.jpg" alt="companY_logo"> -->
+                    <img src="data:image/jpeg;base64,{{logo}}" alt="company_logo">
+                </div>
+
+
+
+
+            </div>
+            <div class="vendor-details">
+                <div class="vendor-name">VS Arogya Meda Pvt. Ltd.</div>
+                <p>Flat - D3, First floor, Block B, S K Residency,<br>
+                    Bariatu Housing Colony, Ranchi, Jharkhand - 834009</p>
+                <p>✉ support@vsarogya.com</p>
+                <p>🖈 DL No. : JH-RN7-153721/153722</p>
+                <p><strong>GST No. : 20AAJCV8843L1ZW</strong></p>
+            </div>
+        </div>
+
+        <div class="client-box">
+            <div class="client-name">{{shop_name}}</div>
+            <p>{{shop_address}}</p>
+            <p><strong>GSTIN :</strong> {{gst_in}} </p>
+            <p><strong>DL No. :</strong> {{dl_no}} </p>
+        </div>
+
+        <div class="meta-info-grid">
+            <div>
+                <div class="meta-row"><strong>Order No. : </strong> {{order_no}} </div>
+                <div class="meta-row"><strong>Order Date : </strong> {{order_date}} </div>
+            </div>
+            <div class="meta-column-right">
+                <div class="meta-row"><strong>Invoice No. :</strong> {{invoice_no}}</div>
+                <div class="meta-row"><strong>Invoice Date :</strong> {{invoice_date}} </div>
+            </div>
+        </div>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 4%;">#</th>
+                    <th style="width: 32%;">Description</th>
+                    <th style="width: 10%;">HSN</th>
+                    <th style="width: 10%;">Mfr.</th>
+                    <th style="width: 10%;">Mkt By</th>
+                    <th style="width: 5%;">Qty</th>
+                    <th style="width: 7%;">MRP</th>
+                    <th style="width: 7%;">Base Rate</th>
+                    <th style="width: 5%;">GST%</th>
+                    <th style="width: 7%;">Net Rate</th>
+                    <th style="width: 8%;">Disc.</th>
+                    <th style="width: 10%;">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- <tr class="item-row">
+                    <td>1</td>
+                    <td class="left-align"><strong>ZYVAC MMR VACCINE 0.5ML</strong></td>
+                    <td>30022023</td>
+                    <td>Zydus Lifescience Ltd.</td>
+                    <td>Zydus Cadila</td>
+                    <td>5</td>
+                    <td>814.00</td>
+                    <td>419.05</td>
+                    <td>5</td>
+                    <td>440.00</td>
+                    <td>5%<br><span style="font-size: 9px; color: var(--text-muted);">(20.95)</span></td>
+                    <td><strong>2,090.00</strong></td>
+                </tr> -->
+                <!-- <tr>
+                    {{items}}
+                </tr>
+
+                <tr class="batch-expiry-row">
+                    <td colspan="15" class="left-align">Batch No.:{{batch_no}} | Exp.: {{exp_date}}</td>
+
+                </tr> -->
+
+            <tbody>
+                {{items}}
+            </tbody>
+            </tbody>
+        </table>
+
+        <table class="invoice-summary-table">
+            <tr>
+                <td class="col-item">Total Item : {{total_item}} </td>
+                <td class="col-qty">Total Qty : {{total_qty}} </td>
+                <td class="col-total">
+                    <div class="flex-total-container">
+                        <span class="total-label">GROSS TOTAL:</span>
+                        <span class="total-amount"> {{gross_total}} </span>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td class="col-item"></td>
+                <td class="col-qty"></td>
+                <td class="col-total">
+                    <div class="flex-total-container">
+                        <span class="total-label">ROUND OFF:</span>
+                        <span class="total-amount">0.00</span>
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+
+        <div class="total-ribbon">
+            <div class="words-amount">{{amount_words}} </div>
+            <div class="numeric-amount">TOTAL : &nbsp;&nbsp;{{amount}}</div>
+        </div>
+
+        <div class="bottom-split">
+            <div>
+                <p style="font-weight: bold; margin-bottom: 4px;">GST/IGST Inclusive of All Taxes(Summarize):</p>
+                <table class="tax-summary-table">
+                    <thead>
+                        <tr>
+                            <th>5%</th>
+                            <th>12%</th>
+                            <th>18%</th>
+                            <th>28%</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>104.76</td>
+                            <td>0</td>
+                            <td>0</td>
+                            <td>0</td>
+                            <td><strong>104.76</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="gst-totals">
+                <div><strong>Total SGST :</strong> &nbsp;&nbsp;&nbsp;&nbsp;52.38</div>
+                <div><strong>Total CGST :</strong> &nbsp;&nbsp;&nbsp;&nbsp;52.38</div>
+            </div>
+        </div>
+
+        <hr class="footer-divider">
+
+        <div class="footer-grid">
+            <div>
+                <div class="section-title">TERMS & CONDITIONS</div>
+                <ol class="terms-text">
+                    <li>Goods once sold will not be taken back or exchanged.</li>
+                    <li>Lifesaving Injection can only be returned if received by us at least 90 days before expiry.</li>
+                    <li>Payment should be made in favor of "VS Arogya Meda Pvt. Ltd."</li>
+                    <li>Subject to Ranchi Jurisdiction only.</li>
+                    <li>All disputes will be settled under Ranchi Jurisdiction only.</li>
+                </ol>
+                <!-- <div style="font-size: 8px; margin-top: 5px; font-weight: bold;">E. & O.E.</div> -->
+            </div>
+
+            <div>
+                <div class="section-title">BANK DETAILS</div>
+                <div class="bank-details">
+                    <strong>Account Name:</strong> VS AROGYA MEDA PRIVATE LIMITED<br>
+                    <strong>Bank Name:</strong> Indian Overseas Bank<br>
+                    <strong>Account No:</strong> 067233000000111<br>
+                    <strong>IFSC Code:</strong> IOBA0000672<br>
+                    <strong>Branch:</strong> Bariatu Road Ranchi
+                </div>
+                <div class="qr-placeholder">
+                    <img src="data:image/jpeg;base64,{{QR}}" alt="QR">
+
+                </div>
+            </div>
+
+            <div class="signature-area">
+
+                <div class="stampded">
+
+                    <img src="data:image/jpeg;base64,{{stamped_1}}" alt="stamped">
+
+
+                </div>
+                <div class="sig-line">
+                    <strong>For VS Arogya Meda Pvt. Ltd.</strong><br>
+                    <span style="font-size: 9px; color: #666; margin-top: 15px; display: block;">Authorized
+                        Signatory</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="customer-care-bar">
+            Customer Care Number : 0651-4502340, WhatsApp number - 9430762051
+        </div>
+
+    </div>
+
+</body>
+
+</html>

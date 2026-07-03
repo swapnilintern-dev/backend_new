@@ -2,9 +2,9 @@ import express from "express";
 import placeOrder, { cancelOrder, getOrders, placeSingleOrder } from "../controller/orderController.js";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
 
-const router = express.Router() ;
+const router = express.Router();
 
-router.post("/place-order" , isAuthenticated ,  placeOrder ) ;
+router.post("/place-order/:id" , isAuthenticated ,  placeOrder ) ;
 
 router.post("/place-single-ord/:id" , isAuthenticated , placeSingleOrder ) ;
 
