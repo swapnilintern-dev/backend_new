@@ -177,7 +177,7 @@ export const placeOrder = async (req, res) => {
 
 
         const createdInvoice = await Invoice.create({
-            invoiceNumber: `INV-${Date.now()}`,
+            invoiceNumber,
             order: Order._id,
             vendor: user._id,
             pdfUrl
