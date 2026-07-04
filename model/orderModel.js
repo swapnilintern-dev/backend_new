@@ -93,7 +93,8 @@ const orderSchema = new mongoose.Schema({
 
     deliveredAt: {
         type: Date
-    }
+    },
+    invoiceUrl :String 
 
 }, { timestamps: true });
 
