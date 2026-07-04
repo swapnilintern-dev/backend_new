@@ -212,7 +212,6 @@ export const placeOrder = async (req, res) => {
 
 export default placeOrder;
 
-export default placeOrder;
 
 
 
