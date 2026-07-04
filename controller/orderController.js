@@ -73,6 +73,24 @@ export const placeOrder = async (req, res) => {
 
 
         const amountWord = converter.toWords(totalAmount);
+
+                 const Order = await order.create({
+
+            user: userId,
+            orderItems,
+            shippingAddress: {
+                address,
+                city,
+                state,
+                pincode,
+                country,
+                phoneNo
+            },
+            totalAmount,
+            orderNo,
+            amountWord,
+          
+        });
        
 
         const invoiceNumber = `INV-${Date.now()}`;
@@ -158,6 +176,12 @@ export const placeOrder = async (req, res) => {
 
         const pdfUrl = result.secure_url;
 
+        await order.updateOne({
+              invoiceUrl :pdfUrl 
+        });
+
+        await order.bulkSave() ;
+
 
 
         const createdInvoice = await invoice.create({
@@ -167,23 +191,7 @@ export const placeOrder = async (req, res) => {
             pdfUrl
         });
         
-         const Order = await order.create({
 
-            user: userId,
-            orderItems,
-            shippingAddress: {
-                address,
-                city,
-                state,
-                pincode,
-                country,
-                phoneNo
-            },
-            totalAmount,
-            orderNo,
-            amountWord,
-            invoiceUrl :pdfUrl 
-        });
 
         
         user.cart = [];
@@ -211,6 +219,7 @@ export const placeOrder = async (req, res) => {
 }
 
 export default placeOrder;
+
 
 
 
