@@ -72,6 +72,7 @@ const orderSchema = new mongoose.Schema({
         type: Date
     },
 
+
     totalAmount: {
         type: Number,
         required: true
@@ -82,19 +83,27 @@ const orderSchema = new mongoose.Schema({
         enum: ["Pending", "Confirm Order", "Shipped", "Out for Delivery", "Delivered", "Cancelled"],
         default: "Pending"
     },
-    coupan_discount: {
-        type: String,
-        default: "NAR00"
-    },
-
-    deliveryAgent: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },
-    deliveryOtp: { type: String },
-    deliveryProof: { url: String, publicId: String },
 
     deliveredAt: {
         type: Date
     },
-    invoiceUrl :String 
+    invoice: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Invoice"
+    },
+    orderNo: {
+        type: String,
+
+    },
+    amountWord: {
+        type: String,
+        required: true
+    },
+
+    paymentMethod: {
+        type: String,
+        enum: ["COD", "ONLINE"]
+    }
 
 }, { timestamps: true });
 

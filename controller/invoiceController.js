@@ -1,57 +1,92 @@
 import order from "../model/orderModel.js";
 import Vendor from "../model/userModel.js";
 
-export const invoiceGenerate = async( req , res ) =>{
+export const invoiceGenerate = async (req, res) => {
 
 
-    try{
+  try {
 
-        const user = await Vendor.findById(req.id ) ;
+    const user = await Vendor.findById(req.id);
 
-        const get_order = await order.findById(req.params.id ).populate("orderItems.product") ;
+    const get_order = await order.findById(req.params.id).populate("orderItems.product");
 
-        console.log( "this is user:" ,  user );
+    console.log("this is user:", user);
 
-        console.log(" this is user's order " , get_order );
+    console.log(" this is user's order ", get_order);
 
-        console.log("Products details is :" , get_order.orderItems );
+    console.log("Products details is :", get_order.orderItems);
 
-        if( !user ) 
-            return res.staus(401)
+    if (!user)
+      return res.staus(401)
         .json({
 
-            message :"unauthorized user ",
-            success : false 
-        }) ;
+          message: "unauthorized user ",
+          success: false
+        });
 
-        if( !get_order ) {
+    if (!get_order) {
 
-            return res.status(404)
-            .json({
+      return res.status(404)
+        .json({
 
-                message:"Not valid order ",
-                success : false 
-            }) ;
-        }
-
-
-
-
-        return ;
-
-        
+          message: "Not valid order ",
+          success: false
+        });
     }
 
-    catch(er) {
 
-        console.log(" er is :" , er ) ;
+
+
+    return;
+
+
+  }
+
+  catch (er) {
+
+    console.log(" er is :", er);
+
+    return res.status(500)
+      .json({
+
+        message: "Internal server error ",
+        success: false
+      });
+  }
+}
+
+export const previewInv = async (req, res) => {
+
+    try {
+
+        const getOrder = await order.findById(req.params.id).populate("invoice");
+
+        console.log(getOrder.invoice);
+        if (!getOrder) {
+            return res.status(404).json({
+                message: "Order not found",
+                success: false
+            });
+        }
+
+        if (!getOrder.invoice) {
+            return res.status(404).json({
+                message: "Invoice not found",
+                success: false
+            });
+        }
+
+        return res.redirect(getOrder.invoice.pdfUrl);
+
+    }
+    catch (er) {
+        console.log(" er is :", er);
 
         return res.status(500)
-        .json({ 
-
-            message :"Internal server error ",
-            success : false 
-        }) ;
+            .json({
+                message: "Internal server error ",
+                success: false
+            });
     }
 }
 

@@ -73,8 +73,7 @@ export const placeOrder = async (req, res) => {
 
 
         const amountWord = converter.toWords(totalAmount);
-
-                 const Order = await order.create({
+        const Order = await order.create({
 
             user: userId,
             orderItems,
@@ -88,10 +87,9 @@ export const placeOrder = async (req, res) => {
             },
             totalAmount,
             orderNo,
-            amountWord,
-          
+            amountWord
         });
-       
+
 
         const invoiceNumber = `INV-${Date.now()}`;
 
@@ -139,7 +137,7 @@ export const placeOrder = async (req, res) => {
             amount: totalAmount
         };
 
-        console.log("invoice data is:", invoiceData)
+        // console.log("invoice data is:", invoiceData)
 
 
         const html = generateInvoiceHTML(invoiceData);
@@ -177,20 +175,17 @@ export const placeOrder = async (req, res) => {
         const pdfUrl = result.secure_url;
 
 
-        Order.invoiceUrl= pdfUrl ;
-        await Order.save() ;
 
-        
-        const createdInvoice = await invoice.create({
+        const createdInvoice = await Invoice.create({
             invoiceNumber: `INV-${Date.now()}`,
             order: Order._id,
             vendor: user._id,
             pdfUrl
         });
-        
 
+        Order.invoice = createdInvoice._id;
+        await Order.save();
 
-        
         user.cart = [];
         await user.save();
 
@@ -216,6 +211,7 @@ export const placeOrder = async (req, res) => {
 }
 
 export default placeOrder;
+
 
 
 
