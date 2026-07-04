@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import order from "../model/orderModel.js";
 import Vendor from "../model/userModel.js";
 
@@ -58,6 +59,15 @@ export const invoiceGenerate = async (req, res) => {
 export const previewInv = async (req, res) => {
 
     try {
+
+        // App ke local order ids (e.g. "MCP-32790") valid ObjectId nahi hote —
+        // findById unpe CastError (500) deta tha. Clean 404 bhejo.
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            return res.status(404).json({
+                message: "Order not found",
+                success: false
+            });
+        }
 
         const getOrder = await order.findById(req.params.id).populate("invoice");
 

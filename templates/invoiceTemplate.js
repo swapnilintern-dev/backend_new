@@ -62,6 +62,15 @@ export const generateInvoiceHTML = (data) => {
         amount: data.amount,
         amount_words: data.amount_words,
 
+        // GST summary (placeOrder compute karta hai; na aaye toh 0.00)
+        gst5: data.gst5 ?? "0.00",
+        gst12: data.gst12 ?? "0.00",
+        gst18: data.gst18 ?? "0.00",
+        gst28: data.gst28 ?? "0.00",
+        gst_total: data.gst_total ?? "0.00",
+        total_sgst: data.total_sgst ?? "0.00",
+        total_cgst: data.total_cgst ?? "0.00",
+
         logo : logoBase64 ,
         stamped_1:stampted_1,
         QR :qr ,

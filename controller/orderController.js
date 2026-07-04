@@ -6,8 +6,6 @@ import converter from "number-to-words"
 import { generateInvoiceHTML } from "../templates/invoiceTemplate.js";
 import invoice from "../model/invoiceModel.js";
 import { generatePDF } from "../utils/generatePdf.js";
-import path from "path";
-import fs from "fs"
 import cloudinary from "../utils/cloudinary.js";
 
 
@@ -91,7 +89,28 @@ export const placeOrder = async (req, res) => {
         });
 
 
+        // Order ban chuka hai — cart snapshot rakh ke abhi clear kar do, taaki
+        // niche invoice/PDF fail ho jaye (e.g. Render pe Chrome missing) toh
+        // bhi order 201 return ho. Order ab KABHI invoice ki wajah se fail
+        // nahi hoga.
+        const cartSnapshot = [...user.cart];
+        user.cart = [];
+        await user.save();
+
+        let createdInvoice = null;
+
+        try {
+
         const invoiceNumber = `INV-${Date.now()}`;
+
+        // GST slab summary (prices GST-inclusive hain — embedded tax nikala).
+        const slabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
+        for (const item of cartSnapshot) {
+            const pct = Number(item.product.gstPercent) || 0;
+            const amt = item.product.price * item.quantity;
+            if (slabs[pct] !== undefined) slabs[pct] += amt - amt / (1 + pct / 100);
+        }
+        const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
 
         const invoiceData = {
             shop_name: user.store_name,
@@ -114,7 +133,7 @@ export const placeOrder = async (req, res) => {
             })
             ,
 
-            items: user.cart.map(item => ({
+            items: cartSnapshot.map(item => ({
                 title: item.product.title,
                 hsnCode: item.product.hsnCode || "N/A",
                 mrp: item.product.mrp,
@@ -129,12 +148,21 @@ export const placeOrder = async (req, res) => {
                 amount: item.product.price * item.quantity
             })),
 
-            total_item: user.cart.length,
+            total_item: cartSnapshot.length,
             total_qty,
             gross_total: totalAmount,
 
             amount_words: amountWord,
-            amount: totalAmount
+            amount: totalAmount,
+
+            // GST summary table ke placeholders (invoice.html)
+            gst5: slabs[5].toFixed(2),
+            gst12: slabs[12].toFixed(2),
+            gst18: slabs[18].toFixed(2),
+            gst28: slabs[28].toFixed(2),
+            gst_total: gstTotal.toFixed(2),
+            total_sgst: (gstTotal / 2).toFixed(2),
+            total_cgst: (gstTotal / 2).toFixed(2)
         };
 
         // console.log("invoice data is:", invoiceData)
@@ -145,55 +173,47 @@ export const placeOrder = async (req, res) => {
         const pdfBuffer = await generatePDF(html);
 
 
-        const pdfPath = path.join(
-            process.cwd(),
-            "uploads",
-            "invoices",
-            `INV-${Date.now()}.pdf`
-        );
-
-
-        // if (!fs.existsSync(invoiceDir)) {
-        //     fs.mkdirSync(invoiceDir, { recursive: true });
-        // }
-
-        fs.writeFileSync(pdfPath, pdfBuffer);
-
-        const result = await cloudinary.uploader.upload(
-            pdfPath,
-
-            {
-                resource_type: "auto",
-                folder: "invoices"
-            }
-        );
-
-        // console.log("invoice data is :", result);
-
-        // fs.unlinkSync(pdfPath);
+        // PDF buffer SEEDHA Cloudinary pe — local "uploads/invoices" folder ki
+        // zaroorat nahi (wo folder exist nahi karta tha, fs.writeFileSync
+        // yahin crash karta tha).
+        const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+                {
+                    resource_type: "auto",
+                    folder: "invoices"
+                },
+                (err, uploaded) => (err ? reject(err) : resolve(uploaded))
+            );
+            stream.end(pdfBuffer);
+        });
 
         const pdfUrl = result.secure_url;
 
 
 
-        const createdInvoice = await Invoice.create({
+        // NOTE: model ka import "invoice" (lowercase) hai — pehle yahan
+        // "Invoice.create" tha jo defined hi nahi tha (ReferenceError → 500).
+        createdInvoice = await invoice.create({
             invoiceNumber,
             order: Order._id,
             vendor: user._id,
             pdfUrl
         });
 
-        console.log("invoice id is :" , createdInvoice._id)
+        console.log("invoice id is :", createdInvoice._id)
 
         Order.invoice = createdInvoice._id;
         await Order.save();
 
-        user.cart = [];
-        await user.save();
+        } catch (invErr) {
+            // Invoice/PDF ka fail hona order ko kabhi fail nahi karega —
+            // order pehle hi ban chuka hai, 201 hi jayega.
+            console.log("invoice generation failed (non-fatal):", invErr.message);
+        }
 
         return res.status(201)
             .json({
-                message: "Order places successfully ",
+                message: "Order placed successfully",
                 success: true,
                 Order,
                 createdInvoice
@@ -302,6 +322,9 @@ export const placeSingleOrder = async (req, res) => {
                 phoneNo
             },
             totalAmount: Product.price,
+            // orderModel me amountWord required hai — iske bina yahan
+            // ValidationError se order 500 ho jata tha.
+            amountWord: converter.toWords(Product.price),
 
         });
 
