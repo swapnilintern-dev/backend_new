@@ -176,14 +176,11 @@ export const placeOrder = async (req, res) => {
 
         const pdfUrl = result.secure_url;
 
-        await order.updateOne({
-              invoiceUrl :pdfUrl 
-        });
 
-        await order.bulkSave() ;
+        Order.invoiceUrl= pdfUrl ;
+        await Order.save() ;
 
-
-
+        
         const createdInvoice = await invoice.create({
             invoiceNumber: `INV-${Date.now()}`,
             order: Order._id,
