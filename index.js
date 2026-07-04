@@ -16,6 +16,7 @@ import adminRouter from "./routes/adminRoute.js" ;
 import paymentRouter from "./routes/paymentRoute.js"
 import bannerRouter from "./routes/bannerRoute.js" ;
 import couponRouter from "./routes/couponRoute.js" ;
+import invoiceRouter from "./routes/invoiceRoute.js" ;
 
 const app = express() ;
 
@@ -47,6 +48,7 @@ app.use('/vsArogya' , adminRouter ) ;
 app.use('/vsArogya' , paymentRouter ) ;
 app.use('/vsArogya' , bannerRouter ) ;
 app.use('/vsArogya' , couponRouter ) ;
+app.use('/vsArogya' , invoiceRouter ) ;
 
 
 

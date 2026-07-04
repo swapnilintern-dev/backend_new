@@ -1,13 +1,6 @@
-import Coupon from "../model/couponModel.js";
 import order from "../model/orderModel.js";
 import product from "../model/productModel.js";
-// import product from "../model/productModel.js";
 import Vendor from "../model/userModel.js" ;
-import path from "path";
-import fs from "fs" ;
-import cloudinary from "../utils/cloudinary.js";
-import { generateInvoiceHTML } from "../templates/invoiceTemplate.js";
-import { generatePDF } from "../utils/generatePdf.js";
 
 
 export const placeOrder = async (req, res) => {
@@ -60,18 +53,14 @@ export const placeOrder = async (req, res) => {
 
         }));
 
-        const total_qty = user.cart.reduce(
-            (qty, item) => qty + item.quantity,
-            0
-        );
-
         const totalAmount = user.cart.reduce((total, item) =>
 
             total + item.product.price * item.quantity, 0
         )
 
-
-        const amountWord = converter.toWords(totalAmount);
+        // The invoice is generated on demand from the saved order (see
+        // invoiceController) — keep order placement lean and reliable so
+        // checkout never fails on PDF/upload side-effects.
         const Order = await order.create({
 
             user: userId,
@@ -86,100 +75,7 @@ export const placeOrder = async (req, res) => {
             },
             totalAmount,
             orderNo,
-            amountWord
-        });
-
-
-        const invoiceNumber = `INV-${Date.now()}`;
-
-        const invoiceData = {
-            shop_name: user.store_name,
-            shop_address: user.full_address,
-            gst_in: user.gst_no,
-            dl_no: user.drug_lic_no,
-
-            order_no: orderNo,
-            order_date: new Date().toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric"
-            }),
-
-            invoice_no: invoiceNumber,
-            invoice_date: new Date().toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric"
-            })
-            ,
-
-            items: user.cart.map(item => ({
-                title: item.product.title,
-                hsnCode: item.product.hsnCode || "N/A",
-                mrp: item.product.mrp,
-                gstPercent: item.product.gstPercent,
-                disPercent: item.product.discountPercent || "N/A",
-                manufacturer: item.product.manufacturer || "N/A",
-                marketedBy: item.product.marketedBy || "N/A",
-                batch_no: item.product.batch_no || "N/A",
-                exp_date: item.product.exp_date || "N/A",
-                quantity: item.quantity,
-                price: item.product.price,
-                amount: item.product.price * item.quantity
-            })),
-
-            total_item: user.cart.length,
-            total_qty,
-            gross_total: totalAmount,
-
-            amount_words: amountWord,
-            amount: totalAmount
-        };
-
-        console.log("invoice data is:", invoiceData)
-
-
-        const html = generateInvoiceHTML(invoiceData);
-
-        const pdfBuffer = await generatePDF(html);
-
-
-        const pdfPath = path.join(
-            process.cwd(),
-            "uploads",
-            "invoices",
-            `INV-${Date.now()}.pdf`
-        );
-
-
-        // if (!fs.existsSync(invoiceDir)) {
-        //     fs.mkdirSync(invoiceDir, { recursive: true });
-        // }
-
-        fs.writeFileSync(pdfPath, pdfBuffer);
-
-        const result = await cloudinary.uploader.upload(
-            pdfPath,
-
-            {
-                resource_type: "auto",
-                folder: "invoices"
-            }
-        );
-
-        // console.log("invoice data is :", result);
-
-        // fs.unlinkSync(pdfPath);
-
-        const pdfUrl = result.secure_url;
-
-
-
-        const createdInvoice = await invoice.create({
-            invoiceNumber: `INV-${Date.now()}`,
-            order: Order._id,
-            vendor: user._id,
-            pdfUrl
+            coupan_discount: req.body.coupan_discount || undefined
         });
 
         user.cart = [];
@@ -187,10 +83,9 @@ export const placeOrder = async (req, res) => {
 
         return res.status(201)
             .json({
-                message: "Order places successfully ",
+                message: "Order placed successfully ",
                 success: true,
-                Order,
-                createdInvoice
+                Order
             });
 
     }
