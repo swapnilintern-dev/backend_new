@@ -183,6 +183,8 @@ export const placeOrder = async (req, res) => {
             pdfUrl
         });
 
+        console.log("invoice id is :" , createdInvoice._id)
+
         Order.invoice = createdInvoice._id;
         await Order.save();
 

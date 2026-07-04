@@ -61,7 +61,7 @@ export const previewInv = async (req, res) => {
 
         const getOrder = await order.findById(req.params.id).populate("invoice");
 
-        console.log(getOrder.invoice);
+
         if (!getOrder) {
             return res.status(404).json({
                 message: "Order not found",
@@ -84,7 +84,7 @@ export const previewInv = async (req, res) => {
 
         return res.status(500)
             .json({
-                message: "Internal server error ",
+                message: "Internal server errorlllk ",
                 success: false
             });
     }
