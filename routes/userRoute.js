@@ -1,7 +1,7 @@
 import express from "express";
 // import  register, { login, logout }  from "../controller/userController.js";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
-import { login, logout, registerVendor } from "../controller/userController.js";
+import { deleteAccount, login, logout, registerVendor } from "../controller/userController.js";
 import upload from "../middlewares/multer.js";
 
 
@@ -23,7 +23,7 @@ router.post(
   registerVendor
 );
 
-router.put('/update-password', isAuthenticated, updatePassword);
+// router.put('/update-password', isAuthenticated, updatePassw);cd 
 
 router.delete('/vendor-delete', isAuthenticated, deleteAccount);
 

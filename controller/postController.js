@@ -355,7 +355,7 @@ export const AllsaveItem = async( req , res ) =>{
 
   try{
 
-    const all_save = await Vendor.findById( req.params.id )
+    const all_save = await Vendor.findById( req.id )
     .populate("savedProducts");
 
     console.log(all_save.savedProducts ) ;
@@ -378,89 +378,6 @@ export const AllsaveItem = async( req , res ) =>{
 }
 
 
-export const updatePassword = async (req, res) => {
-
-  try {
-
-    const { newPassword, confirmPassword } = req.body;
-
-    const vendor = await Vendor.findById(req.id);
-
-    console.log("new ", newPassword, confirmPassword);
-
-
-    if (newPassword !== confirmPassword) {
-
-      return res.status(404)
-        .json({
-          message: "confirm password isn't match",
-          succes: false
-        });
-    }
-
-    if (newPassword === vendor.password) {
-      return res.status(403)
-        .json({
-          message: "Password should be different from previous ",
-          success: false
-        });
-    }
-
-    await vendor.updateOne({
-      password: newPassword
-    });
-
-    return res.status(200)
-      .json({
-        message: "Password updated sucessfully ",
-        success: true
-      });
-  }
-  catch (er) {
-    console.log(" error is :", er);
-    return res.status(500)
-      .json({
-        message: "Internal server ",
-        success: false
-      });
-  }
-
-}
 
 
 
-export const deleteAccount = async (req, res) => {
-  try {
-
-    const vendor = await Vendor.findById(req.id);
-
-    console.log("vendor is :", vendor);
-
-    if( !vendor )
-      return res.status(200)
-    .json({
-
-      message :"Account deleted successfulyy ",
-      success : true 
-    });
-
-  await Vendor.findByIdAndDelete(req.id);
-  
-
-    return res.status(200)
-      .json({
-        message: "Account deleted success ",
-        succes: true
-      });
-  }
-  catch (er) {
-
-    console.log("error is:", er);
-
-    return res.status(500)
-      .json({
-        message: "Internal server eroor ",
-        success: false
-      });
-  }
-}

@@ -306,8 +306,8 @@ export const deleteAccount = async (req, res) => {
       return res.status(200)
         .json({
 
-          message: "Account deleted successfulyy ",
-          success: true
+          message: "Vendor not found ",
+          success: false
         });
 
     await Vendor.findByIdAndDelete(req.id);
