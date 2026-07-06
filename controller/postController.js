@@ -318,7 +318,11 @@ export const saveItem = async( req , res ) =>{
 
     const get_product = await product.findById( req.params.id ) ;
 
-    const isSaved = await get_user.savedProducts.includes(req.params.id ) ;
+    // savedProducts ObjectId array hai — string se .includes() hamesha false
+    // deta tha (isliye unsave kaam nahi karta tha). .some + .equals se sahi.
+    const isSaved = get_user.savedProducts.some(
+      (pid) => pid?.equals?.(req.params.id) || pid?.toString() === req.params.id
+    );
 
     if( isSaved ) {
 
