@@ -21,9 +21,19 @@ export const generatePDF = async (html) => {
   try {
     const page = await browser.newPage();
 
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    // Timeouts badha do — Render free tier weak hai aur invoice HTML bhaari
+    // (base64 images). Default 30s kam padta tha ("Navigation timeout").
+    page.setDefaultTimeout(120000);
+    page.setDefaultNavigationTimeout(120000);
+
+    // "load" (not "networkidle0"): HTML self-contained hai (koi external
+    // network request nahi, sab inline base64), toh network-idle ka wait
+    // faltu tha aur Render pe hang/timeout kar raha tha. "load" images
+    // decode hone tak wait karta hai — PDF ke liye kaafi.
+    await page.setContent(html, { waitUntil: "load", timeout: 120000 });
 
     const pdfBuffer = await page.pdf({
+      timeout: 120000,
       format: "A4",
       printBackground: true,
 
