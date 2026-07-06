@@ -1,4 +1,4 @@
-import express from "express" ;
+import express from "express";
 // import  register, { login, logout }  from "../controller/userController.js";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
 import { login, logout, registerVendor } from "../controller/userController.js";
@@ -7,11 +7,11 @@ import upload from "../middlewares/multer.js";
 
 
 
-const router = express.Router() ;
+const router = express.Router();
 
 // router.route('/register').post( register ) ;
-router.route('/login').post(login) ;
-router.route('/logout').post(isAuthenticated, logout) ; // make sure your route call
+router.route('/login').post(login);
+router.route('/logout').post(isAuthenticated, logout); // make sure your route call
 
 router.post(
   "/register-vendor",
@@ -23,9 +23,13 @@ router.post(
   registerVendor
 );
 
+router.put('/update-password', isAuthenticated, updatePassword);
+
+router.delete('/vendor-delete', isAuthenticated, deleteAccount);
+
 // router.post("/login", login ) ;
 // router.post("/logout" , logout ) ;
 
 
 
-export default router ;
+export default router;

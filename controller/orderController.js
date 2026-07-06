@@ -218,7 +218,6 @@ export const placeOrder = async (req, res) => {
             // order pehle hi ban chuka hai, 201 hi jayega.
             console.log("invoice generation failed (non-fatal):", invErr.message);
         }
-
     }
     catch (er) {
         console.log("error is :", er);

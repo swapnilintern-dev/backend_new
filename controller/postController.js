@@ -133,64 +133,64 @@ const addnewProduct = async (req, res) => {
 export default addnewProduct;
 
 
-export const  deleteProduct = async( req, res ) =>{
-       
-      try{
-         
-        const product_id = req.params.id ;
+export const deleteProduct = async (req, res) => {
 
-        console.log("Product id is : " , product_id ) ;
+  try {
 
-        const get_product = await Product.findById(product_id) ;
-        console.log("product is : " , get_product ) ;
+    const product_id = req.params.id;
+
+    console.log("Product id is : ", product_id);
+
+    const get_product = await Product.findById(product_id);
+    console.log("product is : ", get_product);
 
 
-        if( ! get_product ) {
-          return res.status(401)
-          .json({
-            message : " Product not found ",
-            success : false
-          });
-        }
+    if (!get_product) {
+      return res.status(401)
+        .json({
+          message: " Product not found ",
+          success: false
+        });
+    }
 
-        await Product.findByIdAndDelete(product_id ) ;
-        return res.status(201)
-        .json({ 
-          message :"Product deleted succesfully " ,
-          success : true 
-        })
-      }
-      catch(er) {
-        console.log(er , " er is")
-      }
+    await Product.findByIdAndDelete(product_id);
+    return res.status(201)
+      .json({
+        message: "Product deleted succesfully ",
+        success: true
+      })
+  }
+  catch (er) {
+    console.log(er, " er is")
+  }
 
 };
 
 
-export const getAllProducts =async(req , res ) =>{
+export const getAllProducts = async (req, res) => {
 
-    try{
-        const products =await Product.find() ;
+  try {
+    const products = await Product.find();
 
-        if( !products )
-          return res.status(401)
-        .json({ 
-          message :"Product not found ",
-          success :false 
-        }) ;
-
-        return res.status(200)
-        .json({ 
-            message :"all products are fetched successfully ",
-            success : true ,
-            products
+    if (!products)
+      return res.status(401)
+        .json({
+          message: "Product not found ",
+          success: false
         });
 
+    return res.status(200)
+      .json({
+        message: "all products are fetched successfully ",
+        success: true,
+        products
+      });
 
-    }
-    catch(er){
-        console.log(er , " error from fetch all product ") ;
-    }
+
+  }
+  catch (er) {
+    console.log(er, " error from fetch all product ");
+  }
 }
 
 
@@ -261,5 +261,206 @@ export const updateProduct = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+}
+
+
+export const copyUrl = async (req, res) => {
+  try {
+
+    const get_product = await product.findById(req.params.id);
+
+
+    if (!get_product) {
+
+      return res.status(404)
+        .json({
+
+          message: "Product not found",
+          success: false
+        });
+    }
+
+    const shareUrl = `https://backend-new-0ady.onrender.com/share-prod/${req.params.id}`;
+
+    return res.status(201)
+      .json({
+
+        message: "Product url copied",
+        success: true,
+        shareUrl
+      });
+  }
+  catch (er) {
+    console.log(" er is:", er);
+
+    return res.status(500)
+      .json({
+        message: "Internal server error ",
+        success: false
+      });
+  }
+}
+
+
+
+export const saveItem = async( req , res ) =>{
+
+  try{
+
+    const get_user = await Vendor.findById( req.id ) ;
+
+    const get_product = await product.findById( req.params.id ) ;
+
+    const isSaved = await get_user.savedProducts.includes(req.params.id ) ;
+
+    if( isSaved ) {
+
+     get_user.savedProducts.pull(req.params.id ) ;
+     
+     await get_user.save() ;
+     
+     return res.status(200)
+     .json({
+      message:"Product Usaved ",
+      success: true 
+     });
+    }
+
+     get_user.savedProducts.push(req.params.id ) ;
+     await get_user.save() ;
+
+     return res.status(200)
+     .json({
+
+      message:"Product saved ",
+      success : true 
+     });
+  
+  }
+  catch(er) {
+
+    console.log("er is :" , er ) ;
+
+    return res.status(500)
+    .json({
+      message:"Internal server error",
+      success: false 
+    }) ;
+  }
+}
+
+
+export const AllsaveItem = async( req , res ) =>{
+
+  try{
+
+    const all_save = await Vendor.findById( req.params.id )
+    .populate("savedProducts");
+
+    console.log(all_save.savedProducts ) ;
+    
+    return res.status(200)
+    .json({ 
+      message :"fetched all items ",
+      success : true ,
+      all_save 
+    });
+  }
+  catch(er) {
+    console.log(" er is :" , er ) ;
+    return res.status(500)
+    .json({
+      message:"Internal server error ",
+      success : false 
+    }) ;
+  }
+}
+
+
+export const updatePassword = async (req, res) => {
+
+  try {
+
+    const { newPassword, confirmPassword } = req.body;
+
+    const vendor = await Vendor.findById(req.id);
+
+    console.log("new ", newPassword, confirmPassword);
+
+
+    if (newPassword !== confirmPassword) {
+
+      return res.status(404)
+        .json({
+          message: "confirm password isn't match",
+          succes: false
+        });
+    }
+
+    if (newPassword === vendor.password) {
+      return res.status(403)
+        .json({
+          message: "Password should be different from previous ",
+          success: false
+        });
+    }
+
+    await vendor.updateOne({
+      password: newPassword
+    });
+
+    return res.status(200)
+      .json({
+        message: "Password updated sucessfully ",
+        success: true
+      });
+  }
+  catch (er) {
+    console.log(" error is :", er);
+    return res.status(500)
+      .json({
+        message: "Internal server ",
+        success: false
+      });
+  }
+
+}
+
+
+
+export const deleteAccount = async (req, res) => {
+  try {
+
+    const vendor = await Vendor.findById(req.id);
+
+    console.log("vendor is :", vendor);
+
+    if( !vendor )
+      return res.status(200)
+    .json({
+
+      message :"Account deleted successfulyy ",
+      success : true 
+    });
+
+  await Vendor.findByIdAndDelete(req.id);
+  
+
+    return res.status(200)
+      .json({
+        message: "Account deleted success ",
+        succes: true
+      });
+  }
+  catch (er) {
+
+    console.log("error is:", er);
+
+    return res.status(500)
+      .json({
+        message: "Internal server eroor ",
+        success: false
+      });
   }
 }

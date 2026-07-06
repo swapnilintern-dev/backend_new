@@ -115,7 +115,14 @@ const vendorSchema = new mongoose.Schema(
       type: String,
       enum: ["Pending", "Approved", "Rejected"],
       default: "Pending"
-    }
+    },
+
+    savedProducts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "product"
+      }
+    ],
   },
   {
     timestamps: true,

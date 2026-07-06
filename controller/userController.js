@@ -285,3 +285,48 @@ export const logout = async (req, res) => {
   }
 }
 
+
+
+export const deleteAccount = async (req, res) => {
+  try {
+
+    const vendor = await Vendor.findById(req.id);
+
+    const confirm = req.body ;
+
+    if( !confirm )
+      return res.status(401)
+    .json({
+      message:"First approved account deletion",
+      succes : false
+    });
+    console.log("vendor is :", vendor);
+
+    if (!vendor)
+      return res.status(200)
+        .json({
+
+          message: "Account deleted successfulyy ",
+          success: true
+        });
+
+    await Vendor.findByIdAndDelete(req.id);
+
+
+    return res.status(200)
+      .json({
+        message: "Account deleted success ",
+        succes: true
+      });
+  }
+  catch (er) {
+
+    console.log("error is:", er);
+
+    return res.status(500)
+      .json({
+        message: "Internal server eroor ",
+        success: false
+      });
+  }
+}
