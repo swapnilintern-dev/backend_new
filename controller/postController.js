@@ -1,6 +1,12 @@
 import sharp from "sharp";
 import cloudinary from "../utils/cloudinary.js";
 import Product from "../model/productModel.js";
+import Vendor from "../model/userModel.js";
+
+// Naye saved/share controllers `product` (lowercase) aur `Vendor` reference
+// karte hain — pehle ye import hi nahi the → ReferenceError → 500.
+// `product` ko imported Product model ka alias bana do (same model).
+const product = Product;
 
 const addnewProduct = async (req, res) => {
   try {
