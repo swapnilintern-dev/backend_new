@@ -88,7 +88,6 @@ export const placeOrder = async (req, res) => {
             amountWord
         });
 
-
         // Order ban chuka hai — cart snapshot rakh ke abhi clear kar do, taaki
         // niche invoice/PDF fail ho jaye (e.g. Render pe Chrome missing) toh
         // bhi order 201 return ho. Order ab KABHI invoice ki wajah se fail
@@ -98,6 +97,17 @@ export const placeOrder = async (req, res) => {
         await user.save();
 
         let createdInvoice = null;
+
+        // Response yahin bhejo — par 'return' MAT lagao, warna function yahin
+        // ruk jaata hai aur niche ka invoice/PDF code kabhi chalta hi nahi.
+        // res.json() ke baad bhi function aage chalta rehta hai — PDF
+        // background me ban ke order se link ho jayega.
+        res.status(201)
+            .json({
+                message: "Order placed successfully",
+                success: true,
+                Order
+            });
 
         try {
 
@@ -188,9 +198,6 @@ export const placeOrder = async (req, res) => {
         });
 
         const pdfUrl = result.secure_url;
-
-
-
         // NOTE: model ka import "invoice" (lowercase) hai — pehle yahan
         // "Invoice.create" tha jo defined hi nahi tha (ReferenceError → 500).
         createdInvoice = await invoice.create({
@@ -199,25 +206,18 @@ export const placeOrder = async (req, res) => {
             vendor: user._id,
             pdfUrl
         });
-
         console.log("invoice id is :", createdInvoice._id)
 
         Order.invoice = createdInvoice._id;
         await Order.save();
+
+        return;
 
         } catch (invErr) {
             // Invoice/PDF ka fail hona order ko kabhi fail nahi karega —
             // order pehle hi ban chuka hai, 201 hi jayega.
             console.log("invoice generation failed (non-fatal):", invErr.message);
         }
-
-        return res.status(201)
-            .json({
-                message: "Order placed successfully",
-                success: true,
-                Order,
-                createdInvoice
-            });
 
     }
     catch (er) {
