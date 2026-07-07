@@ -4,10 +4,14 @@ import getDatauri from "../utils/datauri.js";
 import sharp from "sharp";
 import multer from "multer";
 import jwt from "jsonwebtoken";
-import nodmailer from "nodemailer"
+import nodmailer from "nodemailer";
+import { Resend } from "resend"
 
 
 export const registerVendor = async (req, res) => {
+
+
+  console.log("register controller hited ");
   try {
     const {
       vendor_type,
@@ -159,6 +163,45 @@ export const registerVendor = async (req, res) => {
 
       `
     });
+    
+  //   console.log(" resend api is " , process.env.RESEND_API_KEY ) ;
+
+  //   const resend = new Resend(process.env.RESEND_API_KEY);
+
+
+  //   const { data, error } = await resend.emails.send({
+  //   from: process.env.RESEND_FROM_EMAIL ,
+  //     to: [email],
+  //     subject: "Vendor Registration",
+  //     html: `
+  //   <h1>Hi ${contact_person_name}</h1>
+
+  //   <p>🎉 Your vendor registration has been successfully received.</p>
+
+  //   <p>Your application is currently under review.</p>
+
+  //   <p>
+  //     We'll notify you via email once the verification process
+  //     is complete.
+  //   </p>
+
+  //   <p>
+  //     Thank you for being part of our growing network 🚀🎉
+  //   </p>
+
+  //   <p>
+  //     Warm Regards,<br>
+  //     Team: VS Arogya
+  //   </p>
+  // `
+  //   });
+
+  //   if (error) {
+  //     console.error("Resend email error:", error);
+  //   } else {
+  //     console.log("Email sent successfully:", data);
+  //   }
+
 
     console.log("email info is :", info);
 
@@ -292,14 +335,14 @@ export const deleteAccount = async (req, res) => {
 
     const vendor = await Vendor.findById(req.id);
 
-    const confirm = req.body ;
+    const confirm = req.body;
 
-    if( !confirm )
+    if (!confirm)
       return res.status(401)
-    .json({
-      message:"First approved account deletion",
-      succes : false
-    });
+        .json({
+          message: "First approved account deletion",
+          succes: false
+        });
     console.log("vendor is :", vendor);
 
     if (!vendor)
