@@ -102,12 +102,12 @@ export const placeOrder = async (req, res) => {
         // ruk jaata hai aur niche ka invoice/PDF code kabhi chalta hi nahi.
         // res.json() ke baad bhi function aage chalta rehta hai — PDF
         // background me ban ke order se link ho jayega.
-        res.status(201)
-            .json({
-                message: "Order placed successfully",
-                success: true,
-                Order
-            });
+        // res.status(201)
+        //     .json({
+        //         message: "Order placed successfully",
+        //         success: true,
+        //         Order
+        //     });
 
         try {
 
@@ -128,94 +128,94 @@ export const placeOrder = async (req, res) => {
        }
 
 
-        const invoiceData = {
-            shop_name: user.store_name,
-            shop_address: user.full_address,
-            gst_in: user.gst_no,
-            dl_no: user.drug_lic_no,
+        // const invoiceData = {
+        //     shop_name: user.store_name,
+        //     shop_address: user.full_address,
+        //     gst_in: user.gst_no,
+        //     dl_no: user.drug_lic_no,
 
-            order_no: orderNo,
-            order_date: new Date().toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric"
-            }),
+        //     order_no: orderNo,
+        //     order_date: new Date().toLocaleDateString("en-IN", {
+        //         day: "2-digit",
+        //         month: "long",
+        //         year: "numeric"
+        //     }),
 
-            invoice_no: invoiceNumber,
-            invoice_date: new Date().toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric"
-            })
-            ,
+        //     invoice_no: invoiceNumber,
+        //     invoice_date: new Date().toLocaleDateString("en-IN", {
+        //         day: "2-digit",
+        //         month: "long",
+        //         year: "numeric"
+        //     })
+        //     ,
 
-            items: cartSnapshot.map(item => ({
-                title: item.product.title,
-                hsnCode: item.product.hsnCode || "N/A",
-                mrp: item.product.mrp,
-                gstPercent: item.product.gstPercent,
-                disPercent: item.product.discountPercent || "N/A",
-                manufacturer: item.product.manufacturer || "N/A",
-                marketedBy: item.product.marketedBy || "N/A",
-                batch_no: item.product.batch_no || "N/A",
-                exp_date: item.product.exp_date || "N/A",
-                quantity: item.quantity,
-                price: item.product.price,
-                amount: item.product.price * item.quantity
-            })),
+        //     items: cartSnapshot.map(item => ({
+        //         title: item.product.title,
+        //         hsnCode: item.product.hsnCode || "N/A",
+        //         mrp: item.product.mrp,
+        //         gstPercent: item.product.gstPercent,
+        //         disPercent: item.product.discountPercent || "N/A",
+        //         manufacturer: item.product.manufacturer || "N/A",
+        //         marketedBy: item.product.marketedBy || "N/A",
+        //         batch_no: item.product.batch_no || "N/A",
+        //         exp_date: item.product.exp_date || "N/A",
+        //         quantity: item.quantity,
+        //         price: item.product.price,
+        //         amount: item.product.price * item.quantity
+        //     })),
 
-            total_item: cartSnapshot.length,
-            total_qty,
-            gross_total: totalAmount,
+        //     total_item: cartSnapshot.length,
+        //     total_qty,
+        //     gross_total: totalAmount,
 
-            amount_words: amountWord,
-            amount: totalAmount,
+        //     amount_words: amountWord,
+        //     amount: totalAmount,
 
-            // GST summary table ke placeholders (invoice.html)
-            gst5: slabs[5].toFixed(2),
-            gst12: slabs[12].toFixed(2),
-            gst18: slabs[18].toFixed(2),
-            gst28: slabs[28].toFixed(2),
-            gst_total: gstTotal.toFixed(2),
-            total_sgst: (gstTotal / 2).toFixed(2),
-            total_cgst: (gstTotal / 2).toFixed(2)
-        };
+        //     // GST summary table ke placeholders (invoice.html)
+        //     gst5: slabs[5].toFixed(2),
+        //     gst12: slabs[12].toFixed(2),
+        //     gst18: slabs[18].toFixed(2),
+        //     gst28: slabs[28].toFixed(2),
+        //     gst_total: gstTotal.toFixed(2),
+        //     total_sgst: (gstTotal / 2).toFixed(2),
+        //     total_cgst: (gstTotal / 2).toFixed(2)
+        // };
 
         // console.log("invoice data is:", invoiceData)
 
 
-        const html = generateInvoiceHTML(invoiceData);
+        // const html = generateInvoiceHTML(invoiceData);
 
-        const pdfBuffer = await generatePDF(html);
+        // const pdfBuffer = await generatePDF(html);
 
 
         // PDF buffer SEEDHA Cloudinary pe — local "uploads/invoices" folder ki
         // zaroorat nahi (wo folder exist nahi karta tha, fs.writeFileSync
         // yahin crash karta tha).
-        const result = await new Promise((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
-                {
-                    resource_type: "auto",
-                    folder: "invoices"
-                },
-                (err, uploaded) => (err ? reject(err) : resolve(uploaded))
-            );
-            stream.end(pdfBuffer);
-        });
+        // const result = await new Promise((resolve, reject) => {
+        //     const stream = cloudinary.uploader.upload_stream(
+        //         {
+        //             resource_type: "auto",
+        //             folder: "invoices"
+        //         },
+        //         (err, uploaded) => (err ? reject(err) : resolve(uploaded))
+        //     );
+        //     stream.end(pdfBuffer);
+        // });
 
-        const pdfUrl = result.secure_url;
-        // NOTE: model ka import "invoice" (lowercase) hai — pehle yahan
-        // "Invoice.create" tha jo defined hi nahi tha (ReferenceError → 500).
-        createdInvoice = await invoice.create({
-            invoiceNumber,
-            order: Order._id,
-            vendor: user._id,
-            pdfUrl
-        });
-        console.log("invoice id is :", createdInvoice._id)
+        // const pdfUrl = result.secure_url;
+        // // NOTE: model ka import "invoice" (lowercase) hai — pehle yahan
+        // // "Invoice.create" tha jo defined hi nahi tha (ReferenceError → 500).
+        // createdInvoice = await invoice.create({
+        //     invoiceNumber,
+        //     order: Order._id,
+        //     vendor: user._id,
+        //     pdfUrl
+        // });
+        // console.log("invoice id is :", createdInvoice._id)
 
-        Order.invoice = createdInvoice._id;
-        await Order.save();
+        // Order.invoice = createdInvoice._id;
+        // await Order.save();
 
         return;
 
