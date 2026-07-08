@@ -124,7 +124,7 @@ export const placeOrder = async (req, res) => {
         // const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
          
        for( let i = 0 ; i<cartSnapshot.length ; i++ ) {
-        console.log(" gst percent is " , cartSnapshot[i].gstPercent , "<br> ") 
+        console.log(" gst percent is " , cartSnapshot[i].product.gstPercent , "<br> ") 
        }
 
 
