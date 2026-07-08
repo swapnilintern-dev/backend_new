@@ -113,109 +113,109 @@ export const placeOrder = async (req, res) => {
 
         const invoiceNumber = `INV-${Date.now()}`;
 
-        console.log( "cart snapshot is " ,  cartSnapshot ) ;
+        // console.log( "cart snapshot is " ,  cartSnapshot ) ;
         // // GST slab summary (prices GST-inclusive hain — embedded tax nikala).
-        // const slabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
-        // for (const item of cartSnapshot) {
-        //     const pct = Number(item.product.gstPercent) || 0;
-        //     const amt = item.product.price * item.quantity;
-        //     if (slabs[pct] !== undefined) slabs[pct] += amt - amt / (1 + pct / 100);
-        // }
-        // const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
+        const slabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
+        for (const item of cartSnapshot) {
+            const pct = Number(item.product.gstPercent) || 0;
+            const amt = item.product.price * item.quantity;
+            if (slabs[pct] !== undefined) slabs[pct] += amt - amt / (1 + pct / 100);
+        }
+        const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
          
-       for( let i = 0 ; i<cartSnapshot.length ; i++ ) {
-        console.log(" gst percent is " , cartSnapshot[i].product.gstPercent , "<br> ") 
-       }
+    //    for( let i = 0 ; i<cartSnapshot.length ; i++ ) {
+    //     console.log(" gst percent is " , cartSnapshot[i].product.gstPercent , "<br> ") 
+    //    }
 
 
-        // const invoiceData = {
-        //     shop_name: user.store_name,
-        //     shop_address: user.full_address,
-        //     gst_in: user.gst_no,
-        //     dl_no: user.drug_lic_no,
+        const invoiceData = {
+            shop_name: user.store_name,
+            shop_address: user.full_address,
+            gst_in: user.gst_no,
+            dl_no: user.drug_lic_no,
 
-        //     order_no: orderNo,
-        //     order_date: new Date().toLocaleDateString("en-IN", {
-        //         day: "2-digit",
-        //         month: "long",
-        //         year: "numeric"
-        //     }),
+            order_no: orderNo,
+            order_date: new Date().toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric"
+            }),
 
-        //     invoice_no: invoiceNumber,
-        //     invoice_date: new Date().toLocaleDateString("en-IN", {
-        //         day: "2-digit",
-        //         month: "long",
-        //         year: "numeric"
-        //     })
-        //     ,
+            invoice_no: invoiceNumber,
+            invoice_date: new Date().toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric"
+            })
+            ,
 
-        //     items: cartSnapshot.map(item => ({
-        //         title: item.product.title,
-        //         hsnCode: item.product.hsnCode || "N/A",
-        //         mrp: item.product.mrp,
-        //         gstPercent: item.product.gstPercent,
-        //         disPercent: item.product.discountPercent || "N/A",
-        //         manufacturer: item.product.manufacturer || "N/A",
-        //         marketedBy: item.product.marketedBy || "N/A",
-        //         batch_no: item.product.batch_no || "N/A",
-        //         exp_date: item.product.exp_date || "N/A",
-        //         quantity: item.quantity,
-        //         price: item.product.price,
-        //         amount: item.product.price * item.quantity
-        //     })),
+            items: cartSnapshot.map(item => ({
+                title: item.product.title,
+                hsnCode: item.product.hsnCode || "N/A",
+                mrp: item.product.mrp,
+                gstPercent: item.product.gstPercent,
+                disPercent: item.product.discountPercent || "N/A",
+                manufacturer: item.product.manufacturer || "N/A",
+                marketedBy: item.product.marketedBy || "N/A",
+                batch_no: item.product.batch_no || "N/A",
+                exp_date: item.product.exp_date || "N/A",
+                quantity: item.quantity,
+                price: item.product.price,
+                amount: item.product.price * item.quantity
+            })),
 
-        //     total_item: cartSnapshot.length,
-        //     total_qty,
-        //     gross_total: totalAmount,
+            total_item: cartSnapshot.length,
+            total_qty,
+            gross_total: totalAmount,
 
-        //     amount_words: amountWord,
-        //     amount: totalAmount,
+            amount_words: amountWord,
+            amount: totalAmount,
 
-        //     // GST summary table ke placeholders (invoice.html)
-        //     gst5: slabs[5].toFixed(2),
-        //     gst12: slabs[12].toFixed(2),
-        //     gst18: slabs[18].toFixed(2),
-        //     gst28: slabs[28].toFixed(2),
-        //     gst_total: gstTotal.toFixed(2),
-        //     total_sgst: (gstTotal / 2).toFixed(2),
-        //     total_cgst: (gstTotal / 2).toFixed(2)
-        // };
+            // GST summary table ke placeholders (invoice.html)
+            gst5: slabs[5].toFixed(2),
+            gst12: slabs[12].toFixed(2),
+            gst18: slabs[18].toFixed(2),
+            gst28: slabs[28].toFixed(2),
+            gst_total: gstTotal.toFixed(2),
+            total_sgst: (gstTotal / 2).toFixed(2),
+            total_cgst: (gstTotal / 2).toFixed(2)
+        };
 
-        // console.log("invoice data is:", invoiceData)
+        console.log("invoice data is:", invoiceData)
 
 
-        // const html = generateInvoiceHTML(invoiceData);
+        const html = generateInvoiceHTML(invoiceData);
 
-        // const pdfBuffer = await generatePDF(html);
+        const pdfBuffer = await generatePDF(html);
 
 
         // PDF buffer SEEDHA Cloudinary pe — local "uploads/invoices" folder ki
         // zaroorat nahi (wo folder exist nahi karta tha, fs.writeFileSync
         // yahin crash karta tha).
-        // const result = await new Promise((resolve, reject) => {
-        //     const stream = cloudinary.uploader.upload_stream(
-        //         {
-        //             resource_type: "auto",
-        //             folder: "invoices"
-        //         },
-        //         (err, uploaded) => (err ? reject(err) : resolve(uploaded))
-        //     );
-        //     stream.end(pdfBuffer);
-        // });
+        const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+                {
+                    resource_type: "auto",
+                    folder: "invoices"
+                },
+                (err, uploaded) => (err ? reject(err) : resolve(uploaded))
+            );
+            stream.end(pdfBuffer);
+        });
 
-        // const pdfUrl = result.secure_url;
-        // // NOTE: model ka import "invoice" (lowercase) hai — pehle yahan
-        // // "Invoice.create" tha jo defined hi nahi tha (ReferenceError → 500).
-        // createdInvoice = await invoice.create({
-        //     invoiceNumber,
-        //     order: Order._id,
-        //     vendor: user._id,
-        //     pdfUrl
-        // });
-        // console.log("invoice id is :", createdInvoice._id)
+        const pdfUrl = result.secure_url;
+        // NOTE: model ka import "invoice" (lowercase) hai — pehle yahan
+        // "Invoice.create" tha jo defined hi nahi tha (ReferenceError → 500).
+        createdInvoice = await invoice.create({
+            invoiceNumber,
+            order: Order._id,
+            vendor: user._id,
+            pdfUrl
+        });
+        console.log("invoice id is :", createdInvoice._id)
 
-        // Order.invoice = createdInvoice._id;
-        // await Order.save();
+        Order.invoice = createdInvoice._id;
+        await Order.save();
 
         return;
 
