@@ -103,6 +103,10 @@ const orderSchema = new mongoose.Schema({
     paymentMethod: {
         type: String,
         enum: ["COD", "ONLINE"]
+    },
+        orderType :{
+        type :String ,
+        default:"byApp"
     }
 
 }, { timestamps: true });

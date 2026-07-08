@@ -113,14 +113,17 @@ export const placeOrder = async (req, res) => {
 
         const invoiceNumber = `INV-${Date.now()}`;
 
-        // GST slab summary (prices GST-inclusive hain — embedded tax nikala).
-        const slabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
-        for (const item of cartSnapshot) {
-            const pct = Number(item.product.gstPercent) || 0;
-            const amt = item.product.price * item.quantity;
-            if (slabs[pct] !== undefined) slabs[pct] += amt - amt / (1 + pct / 100);
-        }
-        const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
+        console.log(cartSnapshot ) ;
+        // // GST slab summary (prices GST-inclusive hain — embedded tax nikala).
+        // const slabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
+        // for (const item of cartSnapshot) {
+        //     const pct = Number(item.product.gstPercent) || 0;
+        //     const amt = item.product.price * item.quantity;
+        //     if (slabs[pct] !== undefined) slabs[pct] += amt - amt / (1 + pct / 100);
+        // }
+        // const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
+
+
 
         const invoiceData = {
             shop_name: user.store_name,
