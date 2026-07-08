@@ -35,7 +35,13 @@ export const registerVendor = async (req, res) => {
     const drug_lic_copy = req.files?.drug_lic_copy?.[0];
 
 
-    if (!store_name || !mobile_no || !email) {
+    if (!store_name || !mobile_no || !email || !vendor_type || !shop_type || !store_name || 
+        
+       !contact_person_name || !mobile_no || 
+       !email || !full_address || !city || !state || !pin_code 
+       || !gst_status ||!drug_lic_ex_date || !drug_lic_no 
+       
+    ) {
       return res.status(400).json({
         success: false,
         message: "Required fields are missing",
