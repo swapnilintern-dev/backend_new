@@ -113,7 +113,7 @@ export const placeOrder = async (req, res) => {
 
         const invoiceNumber = `INV-${Date.now()}`;
 
-        console.log(cartSnapshot ) ;
+        console.log( "cart snapshot is " ,  cartSnapshot ) ;
         // // GST slab summary (prices GST-inclusive hain — embedded tax nikala).
         // const slabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
         // for (const item of cartSnapshot) {
@@ -122,7 +122,10 @@ export const placeOrder = async (req, res) => {
         //     if (slabs[pct] !== undefined) slabs[pct] += amt - amt / (1 + pct / 100);
         // }
         // const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
-
+         
+       for( let i = 0 ; i<cartSnapshot.length ; i++ ) {
+        console.log(" gst percent is " , cartSnapshot[i].gstPercent , "<br> ") 
+       }
 
 
         const invoiceData = {
