@@ -153,19 +153,27 @@ export const manualOrder = async (req, res) => {
 
             const invoiceNumber = `INV-${Date.now()}`;
 
-            let totalgst = 0;
+            // GST split PER SLAB (5/12/18/28) so the invoice's tax summary
+            // fills each column, not just a single lump. Tax is added on top of
+            // the item price and bucketed by that product's rate.
+            const gstSlabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
 
             for (let i = 0; i < cartSnapshot.length; i++) {
 
-                const gst =cartSnapshot[i].product.gstPercent || 0;
+                const gst = Number(cartSnapshot[i].product.gstPercent) || 0;
 
                 const item_price = cartSnapshot[i].product.price;
                 const item_qty = cartSnapshot[i].quantity;
 
                 const itemTotal = item_price * item_qty;
 
-                totalgst += itemTotal * (gst / 100);
+                if (gstSlabs[gst] !== undefined) {
+                    gstSlabs[gst] += itemTotal * (gst / 100);
+                }
             }
+
+            const totalgst =
+                gstSlabs[5] + gstSlabs[12] + gstSlabs[18] + gstSlabs[28];
 
             console.log("Total GST:", totalgst);
 
@@ -216,12 +224,18 @@ export const manualOrder = async (req, res) => {
 
                 amount_words: amountWord,
                 amount: totalAmount,
-                gst_5: totalgst || "0",
-                gst_28: "0",
-                gst_12: "0",
-                gst_18: "0",
 
-                gst_t_half: totalgst / 2
+                // Keys MUST match the template placeholders read by
+                // invoiceTemplate.js ({{gst5}}, {{gst_total}}, {{total_sgst}}…) —
+                // the old gst_5 / gst_t_half names never reached the template, so
+                // the GST summary rendered blank.
+                gst5: gstSlabs[5].toFixed(2),
+                gst12: gstSlabs[12].toFixed(2),
+                gst18: gstSlabs[18].toFixed(2),
+                gst28: gstSlabs[28].toFixed(2),
+                gst_total: totalgst.toFixed(2),
+                total_sgst: (totalgst / 2).toFixed(2),
+                total_cgst: (totalgst / 2).toFixed(2)
             };
 
             // console.log("invoice data is:", invoiceData)
