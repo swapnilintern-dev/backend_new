@@ -107,6 +107,32 @@ const orderSchema = new mongoose.Schema({
         orderType :{
         type :String ,
         default:"byApp"
+    },
+
+    // --- Audit + idempotency (manual orders placed by marketing on a vendor's
+    // behalf; see ORDER_INVOICE_STOCK_INTEGRATION.md §3) ---
+
+    // "MANUAL_BY_MARKETING" for phone orders created by staff; absent on
+    // vendor-placed orders. The app renders a "Manual" badge from it.
+    source: {
+        type: String
+    },
+
+    // The authenticated staff user (marketing/admin) who created a manual
+    // order — audit trail only. Absent on vendor-placed orders.
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Vendor"
+    },
+
+    // Idempotency key: the app reuses the SAME value when it retries after a
+    // mid-submit network drop, so a duplicate submit maps to the same order.
+    // Unique + sparse so vendor-placed orders (no key) are exempt.
+    clientOrderId: {
+        type: String,
+        unique: true,
+        sparse: true,
+        index: true
     }
 
 }, { timestamps: true });

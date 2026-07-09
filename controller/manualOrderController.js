@@ -1,240 +1,166 @@
-import Invoice from "../model/invoiceModel.js";
+// =============================================================================
+// Manual order — created by the Marketing role on an APPROVED vendor's behalf.
+//
+// Vendors sometimes phone their order in; marketing composes it in the app and
+// submits it here. The order is created exactly like a vendor-placed order
+// (orderController.placeOrder), except:
+//   • user            = the target vendor (so it shows in THEIR panel too),
+//   • shippingAddress = the vendor's registered profile,
+//   • orderPrice      = snapshotted from each product's current price,
+//   • audit fields    = source / createdBy / clientOrderId.
+//
+// It starts "Pending" and flows through the SAME lifecycle — NO stock change
+// and NO invoice here; both happen when marketing ACCEPTS it (confirm-order).
+// Contract: ORDER_INVOICE_STOCK_INTEGRATION.md §3.
+// =============================================================================
+
 import order from "../model/orderModel.js";
+import product from "../model/productModel.js";
 import Vendor from "../model/userModel.js";
-import { generateInvoiceHTML } from "../templates/invoiceTemplate.js";
-import { generatePDF } from "../utils/generatePdf.js";
-import converter from "number-to-words"
-import path from "path";
-import fs from "fs"
-import cloudinary from "../utils/cloudinary.js";
+import converter from "number-to-words";
 
-
-const manualCart = async (req, res) => {
-
+export const createManualOrder = async (req, res) => {
     try {
+        // The authenticated staff user (set by isAuthenticated from the JWT).
+        const createdBy = req.id;
 
-        const userId = req.params.vendorId;
-        const item = req.params.itemId;
+        const { vendorId, items, source, clientOrderId } = req.body;
 
-        const user = await Vendor.findById(userId);
-        const get_product = await product.findById(item);
-
-        console.log("user  is :", user);
-        console.log("item  is :", item);
-
-
-        const itemIndex = user.cart.findIndex(
-            item = item.product.toString() === item
-        );
-        if (itemIndex > -1) {
-            user.cart[itemIndex].quantity += 1
-        }
-        else {
-            user.cart.push({
-                product: item,
-                quantity: 1
-
-            });
-        }
-
-        await user.save();
-
-        return res.status(201)
-            .json({
-                message: "Product added successfully ",
-                success: true
-            });
-    }
-    catch (er) {
-        console.log("er is :", er);
-        return res.status(500)
-            .json({
-                message: "Internal server error ",
-                success: false
-            });
-    }
-}
-export default manualCart;
-
-
-
-export const manualOrder = async (req, res) => {
-
-    try {
-
-        const userId = req.params.vendorId;
-        const user = await Vendor.findById(userId).populate("cart.product");
-        console.log("user cart is :", user);
-
-
-        if (!user) {
-            return res.status(404)
-                .json({
-                    message: "User not found ",
-                    success: false
+        // 1) IDEMPOTENCY — if this submit already landed (network drop, retry),
+        //    return the existing order instead of creating a duplicate.
+        if (clientOrderId) {
+            const existing = await order.findOne({ clientOrderId });
+            if (existing) {
+                return res.status(200).json({
+                    success: true,
+                    message: "Order already created for vendor",
+                    Order: existing
                 });
+            }
         }
 
-        if (user.cart.length === 0) {
-            return res.status(404)
-                .json({
-                    message: "Cart is empty ",
-                    success: false
+        // 2) Validate the vendor — must exist and be Approved.
+        if (!vendorId) {
+            return res.status(400).json({
+                success: false,
+                message: "vendorId is required"
+            });
+        }
+
+        const vendor = await Vendor.findById(vendorId);
+        if (!vendor) {
+            return res.status(404).json({
+                success: false,
+                message: "Vendor not found"
+            });
+        }
+        if (vendor.approvalStatus !== "Approved") {
+            return res.status(403).json({
+                success: false,
+                message: "Vendor is not approved"
+            });
+        }
+
+        // 3) Validate the items.
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Add at least one product"
+            });
+        }
+
+        // 4) Load each product and snapshot its price (same as placeOrder).
+        const orderItems = [];
+        let totalAmount = 0;
+
+        for (const line of items) {
+            const productId = line && line.productId;
+            const quantity = Number(line && line.quantity);
+
+            if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid item in order"
                 });
-        }
+            }
 
+            const Product = await product.findById(productId);
+            if (!Product) {
+                return res.status(404).json({
+                    success: false,
+                    message: `Product not found: ${productId}`
+                });
+            }
+
+            orderItems.push({
+                product: Product._id,
+                quantity,
+                orderPrice: Product.price
+            });
+            totalAmount += Product.price * quantity;
+        }
 
         const orderNo =
             "ORD-" +
             new Date().getFullYear() +
             Math.floor(100000 + Math.random() * 900000);
 
-        const orderItems = user.cart.map(item => ({
-
-            product: item.product._id,
-            quantity: item.quantity,
-            orderPrice: item.product.price,
-
-        }));
-
-        console.log("Shipping address is :", user)
-
-
-        const total_qty = user.cart.reduce(
-            (qty, item) => qty + item.quantity,
-            0
-        );
-
-        const totalAmount = user.cart.reduce((total, item) =>
-
-            total + item.product.price * item.quantity, 0
-        )
-
-
         const amountWord = converter.toWords(totalAmount);
-        const Order = await order.create({
 
-            user: userId,
+        // 5) Create the order — Pending, no stock deduction, no invoice yet.
+        //    shippingAddress comes from the vendor's registered profile;
+        //    "N/A" fallbacks keep a partially-filled profile from failing the
+        //    schema's required address fields.
+        const Order = await order.create({
+            user: vendorId,
             orderItems,
             shippingAddress: {
-                address: user.full_address,
-                city: user.city,
-                state: user.state,
-                pincode: user.pin_code,
-                country: "IN",
-                phoneNo: user.mobile_no
+                address: vendor.full_address || "N/A",
+                city: vendor.city || "N/A",
+                state: vendor.state || "N/A",
+                pincode: vendor.pin_code || "N/A",
+                country: "India",
+                phoneNo: vendor.mobile_no || "N/A"
             },
             totalAmount,
             orderNo,
             amountWord,
-            orderType:"Manual",
+            orderStatus: "Pending",
+            orderType: "Manual",
+            source: source || "MANUAL_BY_MARKETING",
+            createdBy,
+            // Only store a real key so the unique/sparse index skips blanks.
+            ...(clientOrderId ? { clientOrderId } : {})
         });
 
-        const invoiceNumber = `INV-${Date.now()}`;
-
-        const invoiceData = {
-            shop_name: user.store_name,
-            shop_address: user.full_address,
-            gst_in: user.gst_no,
-            dl_no: user.drug_lic_no,
-
-            order_no: orderNo,
-            order_date: new Date().toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric"
-            }),
-
-            invoice_no: invoiceNumber,
-            invoice_date: new Date().toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric"
-            })
-            ,
-
-            items: user.cart.map(item => ({
-                title: item.product.title,
-                hsnCode: item.product.hsnCode || "N/A",
-                mrp: item.product.mrp,
-                gstPercent: item.product.gstPercent,
-                disPercent: item.product.discountPercent || "N/A",
-                manufacturer: item.product.manufacturer || "N/A",
-                marketedBy: item.product.marketedBy || "N/A",
-                batch_no: item.product.batch_no || "N/A",
-                exp_date: item.product.exp_date || "N/A",
-                quantity: item.quantity,
-                price: item.product.price,
-                amount: item.product.price * item.quantity * 0.05
-            })),
-
-            total_item: user.cart.length,
-            total_qty,
-            gross_total: totalAmount,
-
-            amount_words: amountWord,
-            amount: totalAmount
-        };
-
-        // console.log("invoice data is:", invoiceData)
-
-
-        const html = generateInvoiceHTML(invoiceData);
-
-        const pdfBuffer = await generatePDF(html);
-
-
-        const pdfPath = path.join(
-            process.cwd(),
-            "uploads",
-            "invoices",
-            `INV-${Date.now()}.pdf`
-        );
-
-
-        // if (!fs.existsSync(invoiceDir)) {
-        //     fs.mkdirSync(invoiceDir, { recursive: true });
-        // }
-
-        fs.writeFileSync(pdfPath, pdfBuffer);
-
-        const result = await cloudinary.uploader.upload(
-            pdfPath,
-
-            {
-                resource_type: "auto",
-                folder: "invoices"
-            }
-        );
-
-        const pdfUrl = result.secure_url;
-
-        const createdInvoice = await Invoice.create({
-            invoiceNumber: `INV-${Date.now()}`,
-            order: Order._id,
-            vendor: user._id,
-            pdfUrl
+        return res.status(201).json({
+            success: true,
+            message: "Order created for vendor",
+            Order
         });
-
-        Order.invoice = createdInvoice._id;
-        await Order.save();
-
-        user.cart = [];
-        await user.save();
-
-        return res.status(201)
-        .json({
-            message :"invoice generated ", 
-            success : true ,
-            createdInvoice
-        });
-    }
-    catch (er) {
-        console.log(" er is :", er);
-        return res.status(500)
-            .json({
-                message: "Internal server error ",
-                success: false
+    } catch (er) {
+        // A concurrent retry can race past the findOne check and trip the
+        // unique clientOrderId index — resolve it to the winning order so the
+        // caller still gets a clean success instead of a 500.
+        if (er && er.code === 11000 && req.body && req.body.clientOrderId) {
+            const existing = await order.findOne({
+                clientOrderId: req.body.clientOrderId
             });
+            if (existing) {
+                return res.status(200).json({
+                    success: true,
+                    message: "Order already created for vendor",
+                    Order: existing
+                });
+            }
+        }
+
+        console.log("createManualOrder error:", er);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
     }
-}
+};
+
+export default createManualOrder;
