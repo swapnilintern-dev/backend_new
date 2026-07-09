@@ -1,6 +1,7 @@
 import order from "../model/orderModel.js";
 import Vendor from "../model/userModel.js";
 import nodemailer from "nodemailer";
+import generateInvoiceForOrder from "../utils/invoiceGenerator.js";
 
 const approvalneedUser = async (req, res) => {
 
@@ -232,11 +233,34 @@ export const confirmOrder = async (req, res) => {
 
         await confirm_order.save();
 
+        // Render the official invoice (templates/invoice.html) NOW — before we
+        // reply — so it is guaranteed to exist the instant the app shows the
+        // order as Confirmed. This means the app never falls back to its
+        // on-device invoice: it fetches GET /prev-invoice/:id and the PDF is
+        // already linked. Generation is idempotent (vendor-placed orders that
+        // already have one are skipped) and non-fatal (returns null only if the
+        // PDF engine truly fails, in which case the order is still confirmed).
+        //
+        // Because we await Puppeteer here, the client gives this endpoint a
+        // longer timeout (see confirm-order calls in marketing_api / admin_api).
+        const createdInvoice = await generateInvoiceForOrder(confirm_order._id);
+
         return res.status(200)
             .json({
-
                 message: "order confirmed ",
-                success: true
+                success: true,
+                order: {
+                    _id: confirm_order._id,
+                    orderStatus: confirm_order.orderStatus,
+                    ...(createdInvoice
+                        ? {
+                            invoice: {
+                                invoiceNumber: createdInvoice.invoiceNumber,
+                                pdfUrl: createdInvoice.pdfUrl
+                            }
+                        }
+                        : {})
+                }
             });
 
     }

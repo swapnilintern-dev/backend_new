@@ -58,18 +58,28 @@ export const generateInvoiceHTML = (data) => {
         total_item: data.total_item,
         total_qty: data.total_qty,
         gross_total: data.gross_total,
+        round_off : data.round_off ,
 
         amount: data.amount,
         amount_words: data.amount_words,
 
+        gst_5 :data.gst_5 ,
+        gst_12 : data.gst_12 ,
+        gst_18 : data.gst_18 ,
+        gst_28 : data.gst_28 ,
+
+        gst_total : data.gst_5 ,
+        gst_t_half : data.gst_t_half ,
+        round_off : data.round_off ,
+
         // GST summary (placeOrder compute karta hai; na aaye toh 0.00)
-        gst5: data.gst5 ?? "0.00",
-        gst12: data.gst12 ?? "0.00",
-        gst18: data.gst18 ?? "0.00",
-        gst28: data.gst28 ?? "0.00",
-        gst_total: data.gst_total ?? "0.00",
-        total_sgst: data.total_sgst ?? "0.00",
-        total_cgst: data.total_cgst ?? "0.00",
+        // gst5: data.gst5 ?? "0.00",
+        // gst12: data.gst12 ?? "0.00",
+        // gst18: data.gst18 ?? "0.00",
+        // gst28: data.gst28 ?? "0.00",
+        // gst_total: data.gst_total ?? "0.00",
+        // total_sgst: data.total_sgst ?? "0.00",
+        // total_cgst: data.total_cgst ?? "0.00",
 
         logo : logoBase64 ,
         stamped_1:stampted_1,

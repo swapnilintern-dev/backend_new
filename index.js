@@ -18,7 +18,6 @@ import bannerRouter from "./routes/bannerRoute.js" ;
 import couponRouter from "./routes/couponRoute.js" ;
 import invoiceRouter from "./routes/invoiceRoute.js" ;
 import agentRouter from "./routes/deliveryRoute.js" ;
-
 import manualRouter from "./routes/manualRoute.js"
 
 
