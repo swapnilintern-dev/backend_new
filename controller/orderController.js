@@ -123,10 +123,10 @@ export const placeOrder = async (req, res) => {
 
             for (let i = 0; i < cartSnapshot.length; i++) {
 
-                const gst = user.cart[i].product.gstPercent || 0;
+                const gst = cartSnapshot[i].product.gstPercent || 0;
 
-                const item_price = user.cart[i].product.price;
-                const item_qty = user.cart[i].quantity;
+                const item_price = cartSnapshot[i].product.price;
+                const item_qty = cartSnapshot[i].quantity;
 
                 const itemTotal = item_price * item_qty;
 
@@ -198,28 +198,16 @@ export const placeOrder = async (req, res) => {
             const pdfBuffer = await generatePDF(html);
 
 
-            const pdfPath = path.join(
-                process.cwd(),
-                "uploads",
-                "invoices",
-                `INV-${Date.now()}.pdf`
-            );
-
-
-            // Ensure uploads/invoices exists — it is not committed to the repo, so
-            // fs.writeFileSync would otherwise throw ENOENT and crash the invoice.
-            fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
-
-            fs.writeFileSync(pdfPath, pdfBuffer);
-
-            const result = await cloudinary.uploader.upload(
-                pdfPath,
-
-                {
-                    resource_type: "auto",
-                    folder: "invoices"
-                }
-            );
+            // Upload the PDF buffer straight to Cloudinary — no local file, so
+            // it never depends on an uploads/ folder existing (it does not on
+            // Render's ephemeral fs) and leaves no temp files behind.
+            const result = await new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { resource_type: "auto", folder: "invoices" },
+                    (err, uploaded) => (err ? reject(err) : resolve(uploaded))
+                );
+                stream.end(pdfBuffer);
+            });
 
             const pdfUrl = result.secure_url;
 
