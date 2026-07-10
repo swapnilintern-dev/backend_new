@@ -69,6 +69,11 @@ export const placeOrder = async (req, res) => {
             total + item.product.price * item.quantity, 0
         )
 
+        for (let i = 0; i < user.cart.length; i++) {
+            user.cart[i].product.stock -= user.cart[i].quantity;
+            await user.cart[i].product.save();
+        }
+
 
         const amountWord = converter.toWords(totalAmount);
         const Order = await order.create({
@@ -85,8 +90,10 @@ export const placeOrder = async (req, res) => {
             },
             totalAmount,
             orderNo,
-            amountWord
+            amountWord,
         });
+
+
 
 
         const cartSnapshot = [...user.cart];
@@ -206,7 +213,7 @@ export const placeOrder = async (req, res) => {
                 total_sgst: (totalgst / 2).toFixed(2)
             };
 
-            
+
             // console.log("invoice data is:", invoiceData)
 
 
@@ -339,6 +346,8 @@ export const placeSingleOrder = async (req, res) => {
         }];
 
         // console.log("orderitems array ", orderItems ) ;
+        Product.stock -= 1;
+        await Product.save();
 
         const singleOrder = await order.create({
 
@@ -392,7 +401,9 @@ export const cancelOrder = async (req, res) => {
 
         const product_id = req.params.id;
 
-        const existingOrder = await order.findById(product_id);
+        const existingOrder = await order
+            .findById(product_id)
+            .populate("orderItems.product");
 
         if (!existingOrder) {
             return res.status(404)
@@ -401,6 +412,13 @@ export const cancelOrder = async (req, res) => {
                     success: false
                 });
         }
+
+        if (existingOrder.orderStatus === "Cancelled")
+            return res.status(404)
+                .json({
+                    message: "Order already cancled ",
+                    success: false
+                });
 
         if (existingOrder.orderStatus === "Delivered") {
 
@@ -419,6 +437,14 @@ export const cancelOrder = async (req, res) => {
                     message: "unauthorized user ",
                     success: false
                 });
+        }
+
+        for (let i = 0; i < existingOrder.orderItems.length; i++) {
+
+            existingOrder.orderItems[i].product.stock +=
+                existingOrder.orderItems[i].quantity;
+
+            await existingOrder.orderItems[i].product.save();
         }
 
         existingOrder.orderStatus = "Cancelled";
