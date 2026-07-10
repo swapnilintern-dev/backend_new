@@ -22,27 +22,47 @@ export const generateInvoiceHTML = (data) => {
     );
 
 
+    // Small helper: turns any value into money text like "99.00".
+    // If the value is missing/not a number, it safely becomes "0.00"
+    // so the invoice never shows a blank space.
+    const money = (value) => (Number(value) || 0).toFixed(2);
+
     const itemsHtml = data.items
-        .map(
-            (item, index) => `
+        .map((item, index) => {
+            // ---- Per-item GST maths (prices are GST-INCLUSIVE) ----
+            // gstPercent : the product's GST rate (5 / 12 / 18 / 28)
+            // netRate    : selling price WITH GST already inside
+            // baseRate   : price WITHOUT GST  =  netRate / (1 + gst/100)
+            // lineGst    : GST money hidden inside this line's amount
+            const gstPercent = Number(item.gstPercent) || 0;
+            const netRate = Number(item.price) || 0;
+            const baseRate = netRate / (1 + gstPercent / 100);
+            const lineAmount = Number(item.amount) || netRate * (Number(item.quantity) || 0);
+            const lineGst = lineAmount - lineAmount / (1 + gstPercent / 100);
+
+            // Discount column: show "5%" if the product has one, else "0%".
+            const discount = Number(item.disPercent)
+                ? `${Number(item.disPercent)}%`
+                : "0%";
+
+            return `
 <tr class="item-row">
     <td>${index + 1}</td>
     <td class="left-align"><strong>${item.title}</strong></td>
-    <td>${item.hsnCode}</td>
-    <td>${item.manufacturer}</td>
-    <td>${item.marketedBy}</td>
+    <td>${item.hsnCode || "N/A"}</td>
+    <td>${item.manufacturer || "N/A"}</td>
+    <td>${item.marketedBy || "N/A"}</td>
     <td>${item.quantity}</td>
-    <td>${item.mrp}</td>
-    <td>${item.price}</td>
-    <td>${item.gstPercent}</td>
-    <td>${item.price}</td>
-    <td>${item.disPercent}</td>
-    <td><strong>${item.amount}</strong></td>
+    <td>${money(item.mrp)}</td>
+    <td>${money(baseRate)}</td>
+    <td>${gstPercent}%<br><span style="font-size: 9px; color: var(--text-muted);">(${money(lineGst)})</span></td>
+    <td>${money(netRate)}</td>
+    <td>${discount}</td>
+    <td><strong>${money(lineAmount)}</strong></td>
 </tr>
-` )
+`;
+        })
         .join("");
-
-    console.log("data is :", data);
 
     const replacements = {
         shop_name: data.shop_name,
@@ -57,29 +77,28 @@ export const generateInvoiceHTML = (data) => {
 
         total_item: data.total_item,
         total_qty: data.total_qty,
-        gross_total: data.gross_total,
-        round_off : data.round_off ,
+        gross_total: money(data.gross_total),
+        round_off: data.round_off ?? "0.00",
 
-        amount: data.amount,
+        amount: money(data.amount),
         amount_words: data.amount_words,
 
-        gst_5 :data.gst_5 ,
-        gst_12 : data.gst_12 ,
-        gst_18 : data.gst_18 ,
-        gst_28 : data.gst_28 ,
+        // ---- GST summary (per slab) ----
+        // Every value goes through money(), so even when a slab has no
+        // products in it the invoice prints "0.00" instead of a blank cell.
+        gst_5: money(data.gst_5),
+        gst_12: money(data.gst_12),
+        gst_18: money(data.gst_18),
+        gst_28: money(data.gst_28),
+        gst_total: money(data.gst_total),
 
-        gst_total : data.gst_5 ,
-        gst_t_half : data.gst_t_half ,
-        round_off : data.round_off ,
-
-        // GST summary (placeOrder compute karta hai; na aaye toh 0.00)
-        // gst5: data.gst5 ?? "0.00",
-        // gst12: data.gst12 ?? "0.00",
-        // gst18: data.gst18 ?? "0.00",
-        // gst28: data.gst28 ?? "0.00",
-        // gst_total: data.gst_total ?? "0.00",
-        // total_sgst: data.total_sgst ?? "0.00",
-        // total_cgst: data.total_cgst ?? "0.00",
+        // ---- CGST / SGST ----
+        // For same-state sales the total GST is split into two equal halves:
+        // CGST (central) + SGST (state). Callers send total_cgst/total_sgst;
+        // older callers only send gst_t_half — both are accepted here.
+        total_cgst: money(data.total_cgst ?? data.gst_t_half),
+        total_sgst: money(data.total_sgst ?? data.gst_t_half),
+        gst_t_half: money(data.gst_t_half ?? data.total_cgst),
 
         logo : logoBase64 ,
         stamped_1:stampted_1,

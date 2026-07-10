@@ -65,6 +65,15 @@ export const generateInvoiceForOrder = async (orderId) => {
         const totalQty = items.reduce((q, it) => q + it.quantity, 0);
         const grossTotal = items.reduce((t, it) => t + lineAmount(it), 0);
 
+        // CGST and SGST are simply the total GST split into two equal halves
+        // (same-state sale: half goes to the centre, half to the state).
+        const cgst = gstTotal / 2;
+        const sgst = gstTotal / 2;
+
+        // Round-off = difference between the gross total and its nearest
+        // whole rupee, e.g. gross 98.60 → payable 99 → round-off +0.40.
+        const roundOff = Math.round(grossTotal) - grossTotal;
+
         const invoiceNumber = `INV-${Date.now()}`;
 
         const invoiceData = {
@@ -101,13 +110,16 @@ export const generateInvoiceForOrder = async (orderId) => {
             amount_words: Order.amountWord,
             amount: Order.totalAmount,
 
-            gst5: slabs[5].toFixed(2),
-            gst12: slabs[12].toFixed(2),
-            gst18: slabs[18].toFixed(2),
-            gst28: slabs[28].toFixed(2),
+            // Keys match the template placeholders read by invoiceTemplate.js
+            // ({{gst_5}}, {{gst_total}}, {{total_cgst}}, {{total_sgst}} …).
+            gst_5: slabs[5].toFixed(2),
+            gst_12: slabs[12].toFixed(2),
+            gst_18: slabs[18].toFixed(2),
+            gst_28: slabs[28].toFixed(2),
             gst_total: gstTotal.toFixed(2),
-            total_sgst: (gstTotal / 2).toFixed(2),
-            total_cgst: (gstTotal / 2).toFixed(2),
+            total_cgst: cgst.toFixed(2),
+            total_sgst: sgst.toFixed(2),
+            round_off: roundOff.toFixed(2),
         };
 
         const html = generateInvoiceHTML(invoiceData);
@@ -126,6 +138,14 @@ export const generateInvoiceForOrder = async (orderId) => {
             order: Order._id,
             vendor: user._id,
             pdfUrl: result.secure_url,
+
+            // Tax breakdown saved on the invoice record itself, so it can be
+            // read later without re-parsing the PDF.
+            subtotal: grossTotal - gstTotal,
+            cgst,
+            sgst,
+            igst: 0,
+            grandTotal: grossTotal,
         });
 
         Order.invoice = createdInvoice._id;

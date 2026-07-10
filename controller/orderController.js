@@ -120,8 +120,9 @@ export const placeOrder = async (req, res) => {
             const invoiceNumber = `INV-${Date.now()}`;
 
             // GST split PER SLAB (5/12/18/28) so the invoice's tax summary
-            // fills each column, not just a single lump. Tax is added on top of
-            // the item price and bucketed by that product's rate.
+            // fills each column, not just a single lump. Prices are
+            // GST-INCLUSIVE, so the tax already sitting inside each line is
+            // extracted:  gst = total - total / (1 + rate/100).
             const gstSlabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
 
             for (let i = 0; i < cartSnapshot.length; i++) {
@@ -134,7 +135,7 @@ export const placeOrder = async (req, res) => {
                 const itemTotal = item_price * item_qty;
 
                 if (gstSlabs[gst] !== undefined) {
-                    gstSlabs[gst] += itemTotal * (gst / 100);
+                    gstSlabs[gst] += itemTotal - itemTotal / (1 + gst / 100);
                 }
             }
 
@@ -184,26 +185,28 @@ export const placeOrder = async (req, res) => {
 
                 total_item: cartSnapshot.length,
                 total_qty,
-                gross_total: totalAmount + totalgst,
-                round_off: Math.floor(totalAmount + totalgst),
+                // Prices already include GST, so the gross total is simply the
+                // order total — tax is NOT added on top a second time.
+                gross_total: totalAmount,
+                round_off: (Math.round(totalAmount) - totalAmount).toFixed(2),
 
 
                 amount_words: amountWord,
                 amount: totalAmount,
 
                 // Keys MUST match the template placeholders read by
-                // invoiceTemplate.js ({{gst5}}, {{gst_total}}, {{total_sgst}}…) —
-                // the old gst_5 / gst_t_half names never reached the template, so
-                // the GST summary rendered blank.
-                gst5: gstSlabs[5].toFixed(2),
-                gst12: gstSlabs[12].toFixed(2),
-                gst18: gstSlabs[18].toFixed(2),
-                gst28: gstSlabs[28].toFixed(2),
+                // invoiceTemplate.js ({{gst_5}}, {{gst_total}}, {{total_cgst}},
+                // {{total_sgst}}…). CGST and SGST are each half of total GST.
+                gst_5: gstSlabs[5].toFixed(2),
+                gst_12: gstSlabs[12].toFixed(2),
+                gst_18: gstSlabs[18].toFixed(2),
+                gst_28: gstSlabs[28].toFixed(2),
                 gst_total: totalgst.toFixed(2),
-                total_sgst: (totalgst / 2).toFixed(2),
-                total_cgst: (totalgst / 2).toFixed(2)
+                total_cgst: (totalgst / 2).toFixed(2),
+                total_sgst: (totalgst / 2).toFixed(2)
             };
 
+            
             // console.log("invoice data is:", invoiceData)
 
 
