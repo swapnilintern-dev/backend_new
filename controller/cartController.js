@@ -226,8 +226,7 @@ export const increaseItem = async(req , res ) =>{
   }
 
 };
-
-
+  ``
 
 export const decreaseItem = async(req, res ) =>{
 

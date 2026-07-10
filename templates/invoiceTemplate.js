@@ -67,8 +67,10 @@ export const generateInvoiceHTML = (data) => {
     const replacements = {
         shop_name: data.shop_name,
         shop_address: data.shop_address,
-        gst_in: data.gst_in,
-        dl_no: data.dl_no,
+        // Buyer's GST / drug-licence numbers — "N/A" instead of an empty gap
+        // when the vendor's account doesn't have them saved.
+        gst_in: data.gst_in || "N/A",
+        dl_no: data.dl_no || "N/A",
 
         order_no: data.order_no,
         order_date: data.order_date,
