@@ -2,7 +2,6 @@ import jwt from "jsonwebtoken";
 import Outlet from "../model/outletregistersModel.js";
 import outletStock from "../model/outletStockModel.js";
 import product from "../model/productModel.js";
-import jwt from "jsonwebtoken"
 
 
 const outletRegister = async (req, res) => {
@@ -37,6 +36,7 @@ const outletRegister = async (req, res) => {
             city,
             state,
             pincode,
+            gstNumber ,
             password
 
         });
@@ -230,6 +230,39 @@ export const addOutletStock = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: error.message
+        });
+    }
+};
+
+// The outlet directory the marketing head picks from before assigning stock.
+// GET /outlets            → every outlet
+// GET /outlets?pincode=X  → only that pincode
+// Returns an empty array (not a 404) when nothing matches, so the app can show
+// "no outlets found" rather than treat it as an error.
+export const getOutlets = async (req, res) => {
+    try {
+        const { pincode } = req.query;
+
+        const filter = {};
+        if (pincode) filter.pincode = String(pincode).trim();
+
+        const outlets = await Outlet
+            .find(filter)
+            .select("-password")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            count: outlets.length,
+            outlets
+        });
+
+    } catch (error) {
+        console.log("er is :", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
         });
     }
 };
