@@ -4,7 +4,11 @@ import product from "../model/productModel.js";
 import Vendor from "../model/userModel.js";
 import converter from "number-to-words"
 import { generateInvoiceHTML } from "../templates/invoiceTemplate.js";
-import invoice from "../model/invoiceModel.js";
+// MUST be `Invoice` — the invoice block below calls Invoice.create(); a
+// lowercase import left it undefined, so customer-order invoices silently
+// failed every time (the catch swallowed the ReferenceError).
+import Invoice from "../model/invoiceModel.js";
+import outletStock from "../model/outletStockModel.js";
 import { generatePDF } from "../utils/generatePdf.js";
 import cloudinary from "../utils/cloudinary.js";
 
@@ -429,22 +433,43 @@ export const cancelOrder = async (req, res) => {
                 });
         }
 
-        console.log("exiting order is :", typeof (existingOrder.user.toString()), "and ", typeof (userId));
-
-        if (existingOrder.user.toString() !== userId) {
-            return res.status(403)
-                .json({
-                    message: "unauthorized user ",
-                    success: false
-                });
+        // The order's owner can cancel it — and so can STAFF (admin/marketing),
+        // who cancel on the vendor's behalf from their portals. Anyone else is
+        // rejected.
+        if (existingOrder.user && existingOrder.user.toString() !== userId) {
+            const caller = await Vendor.findById(userId);
+            const staffRoles = ["admin", "marketing"];
+            if (!caller || !staffRoles.includes((caller.role || "").toLowerCase())) {
+                return res.status(403)
+                    .json({
+                        message: "unauthorized user ",
+                        success: false
+                    });
+            }
         }
 
-        for (let i = 0; i < existingOrder.orderItems.length; i++) {
+        // Put the stock back where it came FROM. An outlet order sold the
+        // OUTLET's stock (outletStock), not the catalog — restoring
+        // product.stock for it would inflate the catalog and leave the outlet
+        // short.
+        if (existingOrder.outlet) {
+            for (const item of existingOrder.orderItems) {
+                await outletStock.updateOne(
+                    {
+                        outlet: existingOrder.outlet,
+                        product: item.product._id
+                    },
+                    { $inc: { quantity: item.quantity } }
+                );
+            }
+        } else {
+            for (let i = 0; i < existingOrder.orderItems.length; i++) {
 
-            existingOrder.orderItems[i].product.stock +=
-                existingOrder.orderItems[i].quantity;
+                existingOrder.orderItems[i].product.stock +=
+                    existingOrder.orderItems[i].quantity;
 
-            await existingOrder.orderItems[i].product.save();
+                await existingOrder.orderItems[i].product.save();
+            }
         }
 
         existingOrder.orderStatus = "Cancelled";

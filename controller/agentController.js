@@ -1,6 +1,129 @@
 import Vendor from "../model/userModel.js";
 import Order from "../model/orderModel.js";
 import product from "../model/productModel.js";
+import jwt from "jsonwebtoken";
+
+// -----------------------------------------------------------------------------
+// Area Agent login. An agent is a Vendor with role "agent" and an assigned
+// pin_code. They sign in with their mobile number + password; the app then
+// scopes every call to the returned agent id (pincode-wise orders + vendors).
+//   POST /vsArogya/agent-login   { mobileNo, password }
+// -----------------------------------------------------------------------------
+export const agentLogin = async (req, res) => {
+    try {
+        const { mobileNo, password } = req.body;
+
+        if (!mobileNo || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "Mobile number and password are required"
+            });
+        }
+
+        const agent = await Vendor.findOne({
+            mobile_no: mobileNo,
+            role: "agent"
+        });
+
+        if (!agent || password !== agent.password) {
+            return res.status(401).json({
+                success: false,
+                message: "Incorrect mobile number or password"
+            });
+        }
+
+        const token = jwt.sign(
+            { id: agent._id, role: "agent" },
+            process.env.SECRET_KEY,
+            { expiresIn: "7d" }
+        );
+
+        res.cookie("token", token, {
+            httpOnly: true,
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            sameSite: "strict"
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Agent login success",
+            role: "agent",
+            token,
+            agent: {
+                id: agent._id,
+                name: agent.contact_person_name || agent.store_name || "Area Agent",
+                pincode: agent.pin_code || ""
+            }
+        });
+
+    } catch (er) {
+        console.log("agentLogin error:", er);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+// -----------------------------------------------------------------------------
+// Register an Area Agent (created by the marketing head). An agent is a Vendor
+// with role "agent" and an assigned pin_code — approvalStatus is set to
+// "Approved" so they can sign in immediately with mobile + password.
+//   POST /vsArogya/agent-register  { name, mobileNo, email, pincode, password }
+// -----------------------------------------------------------------------------
+export const agentRegister = async (req, res) => {
+    try {
+        const { name, mobileNo, email, pincode, password } = req.body;
+
+        if (!name || !mobileNo || !pincode || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing fields"
+            });
+        }
+
+        const existing = await Vendor.findOne({ mobile_no: mobileNo });
+        if (existing) {
+            return res.status(409).json({
+                success: false,
+                message: "A user with this mobile number already exists"
+            });
+        }
+
+        const agent = await Vendor.create({
+            role: "agent",
+            contact_person_name: name,
+            store_name: name,
+            mobile_no: mobileNo,
+            email: email || undefined,
+            pin_code: pincode,
+            password,
+            approvalStatus: "Approved"
+        });
+
+        const { password: _pw, ...safeAgent } = agent.toObject();
+
+        return res.status(201).json({
+            success: true,
+            message: "Agent registered successfully",
+            agent: safeAgent
+        });
+
+    } catch (er) {
+        // Unique-index clash (mobile_no / email already used).
+        if (er && er.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message: "An account with this mobile number or email already exists"
+            });
+        }
+        console.log("agentRegister error:", er);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
 
 export const pincode_vendors = async (req, res) => {
     try {

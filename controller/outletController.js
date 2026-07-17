@@ -8,6 +8,7 @@ import { generateInvoiceHTML } from "../templates/invoiceTemplate.js";
 import { generatePDF } from "../utils/generatePdf.js";
 import cloudinary from "../utils/cloudinary.js";
 import order from "../model/orderModel.js";
+import Invoice from "../model/invoiceModel.js";
 
 
 const outletRegister = async (req, res) => {
@@ -33,6 +34,15 @@ const outletRegister = async (req, res) => {
                 });
         }
 
+        const existing = await Outlet.findOne({ mobileNo });
+        if (existing) {
+            return res.status(409)
+                .json({
+                    message: "An outlet with this mobile number already exists",
+                    success: false
+                });
+        }
+
         const outlet = await Outlet.create({
             outletName,
             ownerName,
@@ -42,15 +52,19 @@ const outletRegister = async (req, res) => {
             city,
             state,
             pincode,
+            gstNumber,
+            status: status || "Active",
             password
-
         });
+
+        // Never echo the password back to the client.
+        const { password: _pw, ...safeOutlet } = outlet.toObject();
 
         return res.status(201)
             .json({
                 message: "Outlet registered successfully ",
                 success: true,
-                outlet
+                outlet: safeOutlet
             });
 
     }
@@ -117,11 +131,18 @@ export const outlet_login = async (req, res) => {
             sameSite: "strict"
         });
 
+        // The app captures `token` (Bearer auth, works on web + mobile) and the
+        // `outlet` object (minus password) to populate its session — every
+        // outlet-scoped call is keyed on the returned outlet _id.
+        const { password: _pw, ...safeOutlet } = outlet_details.toObject();
 
         return res.status(200)
             .json({
                 message: "Outlet Login success ",
-                success: true
+                success: true,
+                role: "outlet",
+                token,
+                outlet: safeOutlet
             });
     }
     catch (er) {
@@ -164,26 +185,36 @@ export const addOutletStock = async (req, res) => {
             });
         }
 
+        const qty = Number(quantity);
+        if (!Number.isFinite(qty) || qty <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Quantity must be a positive number"
+            });
+        }
+
+        // The catalog is the source: assigning stock to an outlet moves it OUT
+        // of the global product stock. Guard it in BOTH branches (new + existing
+        // outlet row), otherwise a first-time assignment would create stock from
+        // nothing and never deduct the catalog.
+        if (Product.stock < qty) {
+            return res.status(400).json({
+                success: false,
+                message: "Insufficient stock available"
+            });
+        }
+
         const existingStock = await outletStock.findOne({
             product: productId,
             outlet: outletId
         });
 
+        Product.stock -= qty;
+        await Product.save();
+
         if (existingStock) {
-
-            if (Product.stock < quantity) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Insufficient stock available"
-                });
-            }
-
-            existingStock.quantity += Number(quantity);
-
-            Product.stock -= Number(quantity);
-
+            existingStock.quantity += qty;
             await existingStock.save();
-            await Product.save();
 
             return res.status(200).json({
                 success: true,
@@ -195,7 +226,7 @@ export const addOutletStock = async (req, res) => {
         const stock = await outletStock.create({
             product: productId,
             outlet: outletId,
-            quantity
+            quantity: qty
         });
 
         return res.status(201).json({
@@ -395,14 +426,8 @@ export const outletManualOrder = async (req, res) => {
 
             const stock = await outletStock.findOne({
                 outlet: outletId,
-       
+                product: item.product._id
             });
-
-            console.log(" stock is :", stock );
-
-            console.log(" item is ", item) ;
-
-          
 
             if (!stock) {
                 return res.status(404).json({
@@ -648,6 +673,68 @@ export const outletOrderHistory = async (req, res) => {
 
         console.log("Outlet Order History Error:", error);
 
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+};
+
+
+// -----------------------------------------------------------------------------
+// The marketing "Select Outlet" screen: list every outlet, or only those in a
+// given pincode (?pincode=). Passwords are never included.
+//   GET /vsArogya/outlets            → all outlets
+//   GET /vsArogya/outlets?pincode=X  → outlets in that pincode
+// -----------------------------------------------------------------------------
+export const getOutlets = async (req, res) => {
+    try {
+        const { pincode } = req.query;
+        const filter = pincode ? { pincode: String(pincode) } : {};
+
+        const outlets = await Outlet.find(filter)
+            .select("-password -cart")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            count: outlets.length,
+            outlets
+        });
+
+    } catch (error) {
+        console.log("getOutlets error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+};
+
+
+// -----------------------------------------------------------------------------
+// Orders placed by a specific outlet, newest first. The outlet id travels in the
+// route (the app scopes on the signed-in outlet's _id). order.user is the VENDOR
+// the order was placed for, so both product and user are populated for display.
+//   GET /vsArogya/outlet-orders/:id
+// -----------------------------------------------------------------------------
+export const getOutletOrders = async (req, res) => {
+    try {
+        const outletId = req.params.id;
+
+        const orders = await order.find({ outlet: outletId })
+            .populate("orderItems.product", "title packInfo price image")
+            .populate("user", "store_name contact_person_name mobile_no")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            count: orders.length,
+            orders
+        });
+
+    } catch (error) {
+        console.log("getOutletOrders error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal Server Error"

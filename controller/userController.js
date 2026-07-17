@@ -274,7 +274,7 @@ export const login = async (req, res) => {
 
     // Buyers/vendors can only log in once an admin approves them. Staff
     // accounts (admin / marketing / delivery) skip this approval gate.
-    const staffRoles = ["admin", "marketing", "delivery"];
+    const staffRoles = ["admin", "marketing", "delivery", "agent", "outlet"];
     if (!staffRoles.includes((user.role || "").toLowerCase()) &&
       user.approvalStatus !== "Approved") {
       const msg = user.approvalStatus === "Rejected"
@@ -283,12 +283,14 @@ export const login = async (req, res) => {
       return res.status(403).json({ success: false, message: msg });
     }
 
-    // token genrate
+    // token genrate — carry the user's REAL role (admin/marketing/delivery/
+    // agent/buyer), not a hardcoded "vendor", so role-guarded routes can trust
+    // the token.
     const token = jwt.sign(
 
       {
         id: user._id,
-        role: "vendor"
+        role: user.role || "vendor"
       },
       process.env.SECRET_KEY,
       { expiresIn: "1d" }
@@ -309,13 +311,23 @@ export const login = async (req, res) => {
         message: "Login success ",
         success: true,
         role: user.role,
-        token
+        token,
+        // Additive fields (ignored by roles that don't need them). The Area
+        // Agent role scopes its pincode-wise order/vendor calls on these.
+        id: user._id,
+        pincode: user.pin_code,
+        name: user.contact_person_name || user.store_name
       });
 
   }
   catch (er) {
 
     console.log(er, "error is :");
+    return res.status(500)
+      .json({
+        message: "Internal server error ",
+        success: false
+      });
   }
 };
 

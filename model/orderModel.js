@@ -110,10 +110,6 @@ const orderSchema = new mongoose.Schema({
         required: true
     },
 
-    paymentMethod: {
-        type: String,
-        enum: ["COD", "ONLINE"]
-    },
     orderType: {
         type: String,
         default: "byApp"
@@ -143,10 +139,6 @@ const orderSchema = new mongoose.Schema({
         unique: true,
         sparse: true,
         index: true
-    },
-    outlet: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Outlet"
     }
 
 }, { timestamps: true });

@@ -25,6 +25,11 @@ const approvalneedUser = async (req, res) => {
     }
     catch (er) {
         console.log("error is :", er);
+        return res.status(500)
+            .json({
+                message: "Internal server error ",
+                success: false
+            });
     }
 }
 
@@ -51,25 +56,32 @@ export const statusApproval = async (req, res) => {
 
         await pendingVendor.save();
 
-        const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-                user: process.env.EMAIL,
-                pass: process.env.E_PASS
-            }
-        });
+        // Email is best-effort: the vendor IS approved at this point, so a mail
+        // failure (bad SMTP env, network) must not turn the approval into an
+        // error — the admin would retry an already-approved vendor.
+        try {
+            const transporter = nodemailer.createTransport({
+                service: "gmail",
+                auth: {
+                    user: process.env.EMAIL,
+                    pass: process.env.E_PASS
+                }
+            });
 
-        await transporter.sendMail({
-            from: process.env.EMAIL,
-            to: pendingVendor.email,
-            subject: "Account Approved",
-            html: `
-                <h2>Registration Approved</h2>
-        <p>Hello ${pendingVendor.contact_person_name},</p>
-        <p>Your account has been approved by the admin. your user id is: ${pendingVendor.mobile_no} & passowrd is: ${pendingVendor.password} ,</p>
-        <p>You can now log in to the application.</p>
-      `
-        });
+            await transporter.sendMail({
+                from: process.env.EMAIL,
+                to: pendingVendor.email,
+                subject: "Account Approved",
+                html: `
+                    <h2>Registration Approved</h2>
+            <p>Hello ${pendingVendor.contact_person_name},</p>
+            <p>Your account has been approved by the admin. your user id is: ${pendingVendor.mobile_no} & passowrd is: ${pendingVendor.password} ,</p>
+            <p>You can now log in to the application.</p>
+          `
+            });
+        } catch (mailErr) {
+            console.log("approval mail failed (non-fatal):", mailErr?.message);
+        }
 
         return res.status(200)
             .json({
@@ -79,6 +91,11 @@ export const statusApproval = async (req, res) => {
     }
     catch (er) {
         console.log(er);
+        return res.status(500)
+            .json({
+                message: "Internal server error ",
+                success: false
+            });
     }
 }
 
@@ -99,23 +116,28 @@ export const rejectApproval = async (req, res) => {
         vendor.approvalStatus = "Rejected";
         await vendor.save();
 
-        const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-                user: process.env.EMAIL,
-                pass: process.env.E_PASS
-            }
-        });
-        await transporter.sendMail({
-            from: process.env.EMAIL,
-            to: vendor.email,
-            subject: "Account Rejected",
-            html: `
-        <h2>Registration Rejected</h2>
-        <p>Hello ${vendor.contact_person_name},</p>
-        <p>Your account has been rejected by the admin .</p>
-      `
-        });
+        // Best-effort mail — the rejection is already saved (see statusApproval).
+        try {
+            const transporter = nodemailer.createTransport({
+                service: "gmail",
+                auth: {
+                    user: process.env.EMAIL,
+                    pass: process.env.E_PASS
+                }
+            });
+            await transporter.sendMail({
+                from: process.env.EMAIL,
+                to: vendor.email,
+                subject: "Account Rejected",
+                html: `
+            <h2>Registration Rejected</h2>
+            <p>Hello ${vendor.contact_person_name},</p>
+            <p>Your account has been rejected by the admin .</p>
+          `
+            });
+        } catch (mailErr) {
+            console.log("rejection mail failed (non-fatal):", mailErr?.message);
+        }
 
         return res.status(200)
             .json({
@@ -391,7 +413,7 @@ export const getallVendors = async (req, res) => {
 
     try {
 
-        const all_vendors = await Vendor.find();
+        const all_vendors = await Vendor.find().select("-password");
 
         if (all_vendors.length == 0)
             return res.status(402)
@@ -426,17 +448,10 @@ export const getAllActiveVendor = async (req, res) => {
 
         const active_vendor = await Vendor.find({
             approvalStatus: "Approved"
-        });
+        }).select("-password");
 
-
-        if (active_vendor.length == 0)
-            return res.status(404)
-                .json({
-                    message: "active vendors are not found ",
-                    success: false
-                });
-
-
+        // Empty list is not an error — reply 200 so callers (admin count,
+        // outlet vendor picker) can render "none yet" instead of failing.
         return res.status(200)
             .json({
                 message: "active vendors fetched successfully ",

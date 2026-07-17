@@ -52,8 +52,14 @@ export const addCart = async (req, res) => {
     const get_product = await product.findById(product_id);
     const user = await registerVendor.findById(userId);
 
-    console.log("product details is ", get_product, "<br>");
-    console.log(" user details is ", user);
+    if (!get_product) {
+      return res.status(404)
+        .json({ message: "Product not found", success: false });
+    }
+    if (!user) {
+      return res.status(404)
+        .json({ message: "User not found", success: false });
+    }
 
     const itemIndex = user.cart.findIndex(
 
@@ -87,6 +93,8 @@ export const addCart = async (req, res) => {
   }
   catch (er) {
     console.log("error is :", er);
+    return res.status(500)
+      .json({ message: "Internal server error", success: false });
   }
 }
 
@@ -175,6 +183,8 @@ export const removeCartItem = async( req , res ) =>{
    }
   catch(er){
     console.log("error from remove cart item ", er ) ;
+    return res.status(500)
+      .json({ message: "Internal server error", success: false });
   }
 };
 
