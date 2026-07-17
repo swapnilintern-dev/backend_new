@@ -20,6 +20,7 @@ import invoiceRouter from "./routes/invoiceRoute.js" ;
 import agentRouter from "./routes/deliveryRoute.js" ;
 import manualRouter from "./routes/manualRoute.js"
 import xlshRouter from "./routes/xlshRoute.js"
+import outletRouter from "./routes/outletRoute.js"
 
 
 const app = express() ;
@@ -56,6 +57,7 @@ app.use('/vsArogya' , invoiceRouter ) ;
 app.use('/vsArogya' , agentRouter ) ;
 app.use('/vsArogya' , manualRouter ) ;
 app.use('/vsArogya', xlshRouter ) ;
+app.use('/vsArogya', outletRouter ) ;
 
 
 

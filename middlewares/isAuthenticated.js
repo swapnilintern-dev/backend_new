@@ -2,8 +2,11 @@ import jwt from "jsonwebtoken";
 
 const isAuthenticated = async (req, res, next) => {
     try {
-        // Accept the JWT from either the cookie (mobile) or the
-        // Authorization: Bearer header (web + mobile — the reliable path).
+
+        // Accept the JWT from the cookie (set by login) OR the
+        // Authorization: Bearer header. The cookie is httpOnly + sameSite
+        // strict, so it never reaches the server from the web build — the
+        // Bearer header is the app's working path and must stay supported.
         const bearer = req.headers.authorization;
         const token = req.cookies.token ||
             (bearer && bearer.startsWith("Bearer ") ? bearer.split(" ")[1] : null);
@@ -20,15 +23,16 @@ const isAuthenticated = async (req, res, next) => {
             process.env.SECRET_KEY
         );
 
-        req.id = decode.userId;
-
-        // console.log("Cookies:", req.cookies);
-        // console.log("Token:", req.cookies.token);
+        // login() signs { userId }, outlet_login() signs { outletId } — neither
+        // signs `id`, so reading decode.id alone leaves req.id undefined and
+        // breaks every route that scopes by it (cart, orders, payment, invoice).
+        req.id = decode.userId || decode.outletId;
+        req.role = decode.role;
 
         next();
 
-    } catch (er) {
-        console.log(er);
+    } catch (error) {
+        console.log(error);
 
         return res.status(401).json({
             success: false,
