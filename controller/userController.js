@@ -35,12 +35,12 @@ export const registerVendor = async (req, res) => {
     const drug_lic_copy = req.files?.drug_lic_copy?.[0];
 
 
-    if (!store_name || !mobile_no || !email || !vendor_type || !shop_type || !store_name || 
-        
-       !contact_person_name || !mobile_no || 
-       !email || !full_address || !city || !state || !pin_code 
-       || !gst_status ||!drug_lic_ex_date || !drug_lic_no 
-       
+    if (!store_name || !mobile_no || !email || !vendor_type || !shop_type || !store_name ||
+
+      !contact_person_name || !mobile_no ||
+      !email || !full_address || !city || !state || !pin_code
+      || !gst_status || !drug_lic_ex_date || !drug_lic_no
+
     ) {
       return res.status(400).json({
         success: false,
@@ -169,44 +169,44 @@ export const registerVendor = async (req, res) => {
 
       `
     });
-    
-  //   console.log(" resend api is " , process.env.RESEND_API_KEY ) ;
 
-  //   const resend = new Resend(process.env.RESEND_API_KEY);
+    //   console.log(" resend api is " , process.env.RESEND_API_KEY ) ;
+
+    //   const resend = new Resend(process.env.RESEND_API_KEY);
 
 
-  //   const { data, error } = await resend.emails.send({
-  //   from: process.env.RESEND_FROM_EMAIL ,
-  //     to: [email],
-  //     subject: "Vendor Registration",
-  //     html: `
-  //   <h1>Hi ${contact_person_name}</h1>
+    //   const { data, error } = await resend.emails.send({
+    //   from: process.env.RESEND_FROM_EMAIL ,
+    //     to: [email],
+    //     subject: "Vendor Registration",
+    //     html: `
+    //   <h1>Hi ${contact_person_name}</h1>
 
-  //   <p>🎉 Your vendor registration has been successfully received.</p>
+    //   <p>🎉 Your vendor registration has been successfully received.</p>
 
-  //   <p>Your application is currently under review.</p>
+    //   <p>Your application is currently under review.</p>
 
-  //   <p>
-  //     We'll notify you via email once the verification process
-  //     is complete.
-  //   </p>
+    //   <p>
+    //     We'll notify you via email once the verification process
+    //     is complete.
+    //   </p>
 
-  //   <p>
-  //     Thank you for being part of our growing network 🚀🎉
-  //   </p>
+    //   <p>
+    //     Thank you for being part of our growing network 🚀🎉
+    //   </p>
 
-  //   <p>
-  //     Warm Regards,<br>
-  //     Team: VS Arogya
-  //   </p>
-  // `
-  //   });
+    //   <p>
+    //     Warm Regards,<br>
+    //     Team: VS Arogya
+    //   </p>
+    // `
+    //   });
 
-  //   if (error) {
-  //     console.error("Resend email error:", error);
-  //   } else {
-  //     console.log("Email sent successfully:", data);
-  //   }
+    //   if (error) {
+    //     console.error("Resend email error:", error);
+    //   } else {
+    //     console.log("Email sent successfully:", data);
+    //   }
 
 
     console.log("email info is :", info);
@@ -286,7 +286,10 @@ export const login = async (req, res) => {
     // token genrate
     const token = jwt.sign(
 
-      { userId: user._id },
+      {
+        id: user._id,
+        role: "vendor"
+      },
       process.env.SECRET_KEY,
       { expiresIn: "1d" }
     );

@@ -1,5 +1,6 @@
 import order from "../model/orderModel.js";
 import Vendor from "../model/userModel.js";
+import outletStock from "../model/outletStockModel.js";
 import converter from "number-to-words";
 import generateInvoiceForOrder from "../utils/invoiceGenerator.js";
 
@@ -64,6 +65,13 @@ export default manualCart;
 export const manualOrder = async (req, res) => {
     try {
         const userId = req.params.vendorId;
+
+        // Optional: set by the Outlet role so the order can be traced back to
+        // the outlet that placed it (order.user is the VENDOR, so without this
+        // there is no link). Marketing doesn't send it — the order is then
+        // stored without an outlet exactly as before.
+        const { outletId } = req.body || {};
+
         const user = await Vendor.findById(userId).populate("cart.product");
 
         if (!user) {
@@ -98,10 +106,54 @@ export const manualOrder = async (req, res) => {
             0
         );
 
+        // Take the stock out of the right bucket.
+        //
+        // An OUTLET order sells stock the outlet already holds, and that stock
+        // LEFT the catalog when marketing assigned it (addOutletStock does
+        // `Product.stock -= qty`). Deducting product.stock again here would
+        // charge the catalog twice and leave outletStock.quantity untouched, so
+        // the outlet would keep showing stock it had already sold.
+        //
+        // A marketing order has no outlet and sells straight from the catalog —
+        // same as placeOrder (orderController) does for a vendor.
+        if (outletId) {
+            // Check EVERY line before changing anything, so a short line can't
+            // leave the order half-deducted.
+            const rows = [];
+            for (const line of user.cart) {
+                const row = await outletStock.findOne({
+                    outlet: outletId,
+                    product: line.product._id
+                });
+
+                if (!row || row.quantity < line.quantity) {
+                    return res.status(400)
+                        .json({
+                            message: `Insufficient outlet stock for ${line.product.title}: available ${row?.quantity ?? 0}, ordered ${line.quantity}`,
+                            success: false
+                        });
+                }
+                rows.push({ row, qty: line.quantity });
+            }
+
+            for (const { row, qty } of rows) {
+                row.quantity -= qty;
+                await row.save();
+            }
+        }
+        else {
+            for (let i = 0; i < user.cart.length; i++) {
+                user.cart[i].product.stock -= user.cart[i].quantity;
+                await user.cart[i].product.save();
+            }
+        }
+
+
         const amountWord = converter.toWords(totalAmount);
 
         const Order = await order.create({
             user: userId,
+            outlet: outletId || undefined,
             orderItems,
             shippingAddress: {
                 address: user.full_address,
@@ -115,6 +167,7 @@ export const manualOrder = async (req, res) => {
             orderNo,
             amountWord
         });
+
 
         // The order captured the cart — clear it now.
         user.cart = [];

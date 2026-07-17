@@ -60,6 +60,19 @@ const outletSchema = new mongoose.Schema(
       type: String,
       default: "outlet",
     },
+
+    cart: [
+      {
+        product: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "product"
+        },
+        quantity: {
+          type: Number,
+          default: 1
+        }
+      }
+    ]
   },
   {
     timestamps: true,

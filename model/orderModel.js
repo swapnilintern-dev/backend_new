@@ -4,7 +4,17 @@ const orderSchema = new mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Vendor",
-        required: true
+        // required: true
+    },
+
+    // The outlet that placed this order, when it came from the Outlet role.
+    // Absent on vendor-placed and marketing-placed orders — so it is optional.
+    // This is the ONLY link back to the outlet: order.user is the VENDOR the
+    // order is for, which is why "this outlet's orders" cannot be derived
+    // without it.
+    outlet: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Outlet"
     },
 
     orderItems: [
@@ -104,9 +114,9 @@ const orderSchema = new mongoose.Schema({
         type: String,
         enum: ["COD", "ONLINE"]
     },
-        orderType :{
-        type :String ,
-        default:"byApp"
+    orderType: {
+        type: String,
+        default: "byApp"
     },
 
     // --- Audit + idempotency (manual orders placed by marketing on a vendor's
@@ -133,6 +143,10 @@ const orderSchema = new mongoose.Schema({
         unique: true,
         sparse: true,
         index: true
+    },
+    outlet: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Outlet"
     }
 
 }, { timestamps: true });

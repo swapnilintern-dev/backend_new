@@ -26,9 +26,8 @@ const isAuthenticated = async (req, res, next) => {
         // login() signs { userId }, outlet_login() signs { outletId } — neither
         // signs `id`, so reading decode.id alone leaves req.id undefined and
         // breaks every route that scopes by it (cart, orders, payment, invoice).
-        req.id = decode.userId || decode.outletId;
+         req.id = decode.id;
         req.role = decode.role;
-
         next();
 
     } catch (error) {

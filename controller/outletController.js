@@ -1,7 +1,13 @@
-import jwt from "jsonwebtoken";
 import Outlet from "../model/outletregistersModel.js";
 import outletStock from "../model/outletStockModel.js";
 import product from "../model/productModel.js";
+import jwt from "jsonwebtoken"
+import converter from "number-to-words"
+import Vendor from "../model/userModel.js";
+import { generateInvoiceHTML } from "../templates/invoiceTemplate.js";
+import { generatePDF } from "../utils/generatePdf.js";
+import cloudinary from "../utils/cloudinary.js";
+import order from "../model/orderModel.js";
 
 
 const outletRegister = async (req, res) => {
@@ -36,7 +42,6 @@ const outletRegister = async (req, res) => {
             city,
             state,
             pincode,
-            gstNumber ,
             password
 
         });
@@ -94,11 +99,12 @@ export const outlet_login = async (req, res) => {
                 });
         }
 
+
         // token generate 
         const token = jwt.sign(
 
             {
-                outletId: outlet_details._id,
+                id: outlet_details._id,
                 role: "outlet"
             },
             process.env.SECRET_KEY,
@@ -111,19 +117,11 @@ export const outlet_login = async (req, res) => {
             sameSite: "strict"
         });
 
-        // The cookie is httpOnly + sameSite:strict, so the app can't read it
-        // on web and has nothing to scope /outlet-products/:id by. Send the
-        // token and the outlet itself in the body too — never the password.
-        const outlet = outlet_details.toObject();
-        delete outlet.password;
 
         return res.status(200)
             .json({
                 message: "Outlet Login success ",
-                success: true,
-                role: "outlet",
-                token,
-                outlet
+                success: true
             });
     }
     catch (er) {
@@ -149,17 +147,6 @@ export const addOutletStock = async (req, res) => {
             });
         }
 
-        const qty = Number(quantity);
-
-        // A negative qty would ADD to Product.stock below, and a fractional one
-        // would corrupt both counters — neither is a real assignment.
-        if (!Number.isInteger(qty) || qty <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Quantity must be a positive whole number"
-            });
-        }
-
         const Product = await product.findById(productId);
         const outlet = await Outlet.findById(outletId);
 
@@ -177,27 +164,23 @@ export const addOutletStock = async (req, res) => {
             });
         }
 
-        // Assigning stock MOVES it out of the global catalog and into the
-        // outlet. The check and the deduction apply to the first assignment
-        // exactly as they do to a top-up — otherwise the row created below
-        // would invent stock the catalog never had.
-        if (Product.stock < qty) {
-            return res.status(400).json({
-                success: false,
-                message: "Insufficient stock available"
-            });
-        }
-
         const existingStock = await outletStock.findOne({
             product: productId,
             outlet: outletId
         });
 
-        Product.stock -= qty;
-
         if (existingStock) {
 
-            existingStock.quantity += qty;
+            if (Product.stock < quantity) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Insufficient stock available"
+                });
+            }
+
+            existingStock.quantity += Number(quantity);
+
+            Product.stock -= Number(quantity);
 
             await existingStock.save();
             await Product.save();
@@ -212,10 +195,8 @@ export const addOutletStock = async (req, res) => {
         const stock = await outletStock.create({
             product: productId,
             outlet: outletId,
-            quantity: qty
+            quantity
         });
-
-        await Product.save();
 
         return res.status(201).json({
             success: true,
@@ -230,39 +211,6 @@ export const addOutletStock = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: error.message
-        });
-    }
-};
-
-// The outlet directory the marketing head picks from before assigning stock.
-// GET /outlets            → every outlet
-// GET /outlets?pincode=X  → only that pincode
-// Returns an empty array (not a 404) when nothing matches, so the app can show
-// "no outlets found" rather than treat it as an error.
-export const getOutlets = async (req, res) => {
-    try {
-        const { pincode } = req.query;
-
-        const filter = {};
-        if (pincode) filter.pincode = String(pincode).trim();
-
-        const outlets = await Outlet
-            .find(filter)
-            .select("-password")
-            .sort({ createdAt: -1 });
-
-        return res.status(200).json({
-            success: true,
-            count: outlets.length,
-            outlets
-        });
-
-    } catch (error) {
-        console.log("er is :", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error"
         });
     }
 };
@@ -293,3 +241,416 @@ export const getOutletProducts = async (req, res) => {
         });
     }
 }
+
+
+export const addToCart = async (req, res) => {
+    try {
+
+        const outletId = req.id;
+
+        console.log("outlet id :", outletId ) ;
+
+        const { productId, quantity } = req.body;
+
+        const outlet = await Outlet.findById(outletId);
+
+        if (!outlet) {
+            return res.status(404).json({
+                success: false,
+                message: "Outlet not found"
+            });
+        }
+
+        const get_product = await product.findById(productId);
+
+        if (!get_product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found"
+            });
+        }
+
+        const existingItem = outlet.cart.find(
+            item => item.product.toString() === productId
+        );
+
+        if (existingItem) {
+
+            existingItem.quantity += Number(quantity);
+
+        } else {
+
+            outlet.cart.push({
+                product: productId,
+                quantity
+            });
+
+        }
+
+        await outlet.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Product added to cart",
+            cart: outlet.cart
+        });
+
+    } catch (error) {
+
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+
+};
+
+
+// cart summary
+export const cartSummary = async (req, res) => {
+    try {
+
+        const outletId = req.id;
+
+        console.log("outlet id ", outletId ) ;
+
+        const outlet = await Outlet.findById(outletId)
+            .populate("cart.product");
+
+        if (!outlet) {
+            return res.status(404).json({
+                success: false,
+                message: "Outlet not found"
+            });
+        }
+
+        let totalAmount = 0;
+        let totalItems = 0;
+
+        outlet.cart.forEach(item => {
+
+            totalItems += item.quantity;
+
+            totalAmount +=
+                item.product.price * item.quantity;
+        });
+
+        return res.status(200).json({
+            message :"cart summary calculated" ,
+            success: true,
+            totalItems,
+            totalAmount,
+            cart: outlet.cart
+        });
+
+    } catch (error) {
+
+        return res.status(500).json({
+
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+
+export const outletManualOrder = async (req, res) => {
+    try {
+
+        const outletId = req.id;
+
+        console.log( "outlet id is:", outletId, "user id is :", req.params.id ) ;
+        const user = await Vendor.findById(req.params.id);
+        const outlet = await Outlet.findById(outletId)
+            .populate("cart.product");
+
+        if (!user) {
+            return res.status(404)
+                .json({
+                    message: "Vendor not found ",
+                    success: false
+                });
+        }
+
+        if (!outlet) {
+            return res.status(404).json({
+                success: false,
+                message: "Outlet not found"
+            });
+        }
+
+        if (outlet.cart.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Cart is empty"
+            });
+        }
+
+        const total_qty = outlet.cart.reduce(
+            (qty, item) => qty + item.quantity, 0
+        );
+
+        // 1. Stock Check
+        for (const item of outlet.cart) {
+
+            const stock = await outletStock.findOne({
+                outlet: outletId,
+       
+            });
+
+            console.log(" stock is :", stock );
+
+            console.log(" item is ", item) ;
+
+          
+
+            if (!stock) {
+                return res.status(404).json({
+                    success: false,
+                    message: `${item.product.title} stock not found`
+                });
+            }
+            
+
+            if (stock.quantity < item.quantity) {
+                return res.status(400).json({
+                    success: false,
+                    message: `${item.product.title} has only ${stock.quantity} stock available`
+                });
+            }
+        }
+
+        // 2. Order Items Prepare
+        let totalAmount = 0;
+
+        const orderItems = outlet.cart.map((item) => {
+            totalAmount += item.product.price * item.quantity;
+
+            return {
+                product: item.product._id,
+                quantity: item.quantity,
+                orderPrice: item.product.price
+            };
+        });
+
+        const amountWord = converter.toWords(totalAmount);
+
+
+        // 3. Reduce Outlet Stock
+        for (const item of outlet.cart) {
+
+            await outletStock.updateOne(
+                {
+                    outlet: outletId,
+                    product: item.product._id
+                },
+                {
+                    $inc: {
+                        quantity: -item.quantity
+                    }
+                }
+            );
+        }
+
+        // Order Number
+        const orderNo =
+            "ORD-" +
+            Date.now() +
+            "-" +
+            Math.floor(Math.random() * 1000);
+
+        // 4. Create Order
+        const createOrder = await order.create({
+
+            outlet: outletId,
+
+            orderItems,
+
+            shippingAddress: {
+                address: outlet.address,
+                city: outlet.city,
+                state: outlet.state,
+                pincode: outlet.pincode,
+                country: "India",
+                phoneNo: outlet.mobileNo
+            },
+
+            totalAmount,
+
+            amountWord: `${amountWord} Rupees Only`,
+            // amountWord: toWords(totalAmount) + " rupees only",
+
+            paymentMethod: "COD",
+
+            orderStatus: "Pending",
+
+            orderType: "Outlet",
+
+            orderNo
+        });
+
+        // 5. Clear Cart
+        const cartSnapshot = [...outlet.cart];
+        outlet.cart = [];
+        await outlet.save();
+
+        res.status(201).json({
+            success: true,
+            message: "Order created successfully",
+            createOrder
+        });
+
+        let createInvoice = null;
+
+        try {
+
+            const invoiceNumber = `INV-${Date.now()}`;
+
+            const gstSlabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
+
+            for (let i = 0; i < cartSnapshot.length; i++) {
+
+                const gst = Number(cartSnapshot[i].product.gstPercent) || 0;
+
+                const item_price = cartSnapshot[i].product.price;
+                const item_qty = cartSnapshot[i].quantity;
+
+                const itemTotal = item_price * item_qty;
+
+                if (gstSlabs[gst] !== undefined) {
+                    gstSlabs[gst] += itemTotal - itemTotal / (1 + gst / 100);
+                }
+            }
+
+            const totalgst =
+                gstSlabs[5] + gstSlabs[12] + gstSlabs[18] + gstSlabs[28];
+
+
+            const invoiceData = {
+                shop_name: user.store_name,
+                shop_address: user.full_address,
+                gst_in: user.gst_no,
+                order_no: orderNo,
+                order_date: new Date().toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric"
+                }),
+                invoice_no: invoiceNumber,
+                invoice_date: new Date().toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric"
+                }),
+                items: cartSnapshot.map(item => ({
+                    title: item.product.title,
+                    hsnCode: item.product.hsnCode || "N/A",
+                    mrp: item.product.mrp,
+                    gstPercent: item.product.gstPercent,
+                    disPercent: item.product.discountPercent || "N/A",
+                    manufacturer: item.product.manufacturer || "N/A",
+                    marketedBy: item.product.marketedBy || "N/A",
+                    batch_no: item.product.batch_no || "N/A",
+                    exp_date: item.product.exp_date || "N/A",
+                    quantity: item.quantity,
+                    price: item.product.price,
+                    amount: item.product.price * item.quantity
+                })),
+                total_item: cartSnapshot.length,
+                total_qty,
+                gross_total: totalAmount,
+                round_off: (Math.round(totalAmount) - totalAmount).toFixed(2),
+
+
+                amount_words: amountWord,
+                amount: totalAmount,
+
+                // Keys MUST match the template placeholders read by
+                // invoiceTemplate.js ({{gst_5}}, {{gst_total}}, {{total_cgst}},
+                // {{total_sgst}}…). CGST and SGST are each half of total GST.
+                gst_5: gstSlabs[5].toFixed(2),
+                gst_12: gstSlabs[12].toFixed(2),
+                gst_18: gstSlabs[18].toFixed(2),
+                gst_28: gstSlabs[28].toFixed(2),
+                gst_total: totalgst.toFixed(2),
+                total_cgst: (totalgst / 2).toFixed(2),
+                total_sgst: (totalgst / 2).toFixed(2)
+
+
+            };
+
+            const html = generateInvoiceHTML(invoiceData);
+            const pdfBuffer = await generatePDF(html);
+
+            const result = await new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { resource_type: "auto", folder: "invoices" },
+                    (err, uploaded) => (err ? reject(err) : resolve(uploaded))
+                );
+                stream.end(pdfBuffer);
+            });
+
+            const pdfUrl = result.secure_url;
+
+            const createdInvoice = await Invoice.create({
+                invoiceNumber: `INV-${Date.now()}`,
+                order: createOrder._id,
+                vendor: user._id,
+                pdfUrl
+            });
+
+            createOrder.invoice = createdInvoice._id;
+            await createOrder.save();
+
+            // user.cart = [];
+            // await user.save();
+            console.log(
+                "Invoice generated successfully:",
+                createdInvoice._id
+            );
+
+        }
+        catch (er) {
+            console.log(" er from invoice gen outlet order ", er);
+        }
+
+    } catch (error) {
+
+        console.log("Outlet Manual Order Error :", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+};
+
+
+export const outletOrderHistory = async (req, res) => {
+    try {
+
+        const outletId = req.id;
+
+        const orders = await order.find({
+            outlet: outletId
+        })
+            .populate("orderItems.product", "title price image")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            message :"Fetched all product ",
+            success: true,
+            totalOrders: orders.length,
+            orders
+        });
+
+    } catch (error) {
+
+        console.log("Outlet Order History Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+};
