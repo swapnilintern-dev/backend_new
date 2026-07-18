@@ -1,5 +1,5 @@
 import express from "express";
-import { agentLogin, agentRegister, getPincodeOrders, pincode_vendors } from "../controller/agentController.js";
+import { agentLogin, agentRegister, getAgentProfile, getPincodeOrders, pincode_vendors } from "../controller/agentController.js";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
 
 const router = express.Router();
@@ -17,5 +17,8 @@ router.post("/agent-register", isAuthenticated, agentRegister);
 router.post("/area-agent-login", agentLogin);
 router.post("/pin-vendors/:id", pincode_vendors);
 router.post("/pin-orders/:id", getPincodeOrders);
+
+// The signed-in agent's own profile (name, mobile, email, pincode, status).
+router.get("/agent-profile/:id", getAgentProfile);
 
 export default router;

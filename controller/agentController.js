@@ -168,6 +168,43 @@ export const pincode_vendors = async (req, res) => {
 };
 
 
+// -----------------------------------------------------------------------------
+// A single Area Agent's own profile, read by the signed-in agent for its Profile
+// screen. An agent is a Vendor with role "agent"; the id travels in the route
+// (the app scopes on the session's _id). Password/cart/savedProducts are never
+// returned.
+//   GET /vsArogya/agent-profile/:id
+// -----------------------------------------------------------------------------
+export const getAgentProfile = async (req, res) => {
+    try {
+        const agentId = req.params.id;
+
+        const agent = await Vendor
+            .findById(agentId)
+            .select("-password -cart -savedProducts");
+
+        if (!agent || agent.role !== "agent") {
+            return res.status(404).json({
+                success: false,
+                message: "Agent not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            agent
+        });
+
+    } catch (error) {
+        console.log("getAgentProfile error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+};
+
+
 export const getPincodeOrders = async (req, res) => {
     try {
 

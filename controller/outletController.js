@@ -713,6 +713,40 @@ export const getOutlets = async (req, res) => {
 
 
 // -----------------------------------------------------------------------------
+// A single outlet's own profile, read by the signed-in outlet for its Profile
+// tab. The outlet id travels in the route (the app scopes on the session's _id).
+// Password and cart are never returned.
+//   GET /vsArogya/outlet-profile/:id
+// -----------------------------------------------------------------------------
+export const getOutletProfile = async (req, res) => {
+    try {
+        const outletId = req.params.id;
+
+        const outlet = await Outlet.findById(outletId).select("-password -cart");
+
+        if (!outlet) {
+            return res.status(404).json({
+                success: false,
+                message: "Outlet not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            outlet
+        });
+
+    } catch (error) {
+        console.log("getOutletProfile error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+};
+
+
+// -----------------------------------------------------------------------------
 // Orders placed by a specific outlet, newest first. The outlet id travels in the
 // route (the app scopes on the signed-in outlet's _id). order.user is the VENDOR
 // the order was placed for, so both product and user are populated for display.

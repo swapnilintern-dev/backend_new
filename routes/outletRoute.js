@@ -6,6 +6,7 @@ import outletRegister, {
     getOutlets,
     getOutletOrders,
     getOutletProducts,
+    getOutletProfile,
     outletManualOrder,
     outletOrderHistory,
     outlet_login,
@@ -28,8 +29,10 @@ router.get("/outlets", isAuthenticated, getOutlets);
 router.post("/outlet-stock", isAuthenticated, addOutletStock);
 router.post("/outlet-addstock", isAuthenticated, addOutletStock);
 
-// --- Outlet role: stock + orders (outlet session) ---------------------------
-// The app reads the outlet's assigned stock and its order history by outlet id.
+// --- Outlet role: profile + stock + orders (outlet session) -----------------
+// The app reads the outlet's own profile, its assigned stock and its order
+// history by outlet id.
+router.get("/outlet-profile/:id", isAuthenticated, getOutletProfile);
 router.get("/outlet-products/:id", isAuthenticated, getOutletProducts);
 router.post("/outlet-allstocks/:id", isAuthenticated, getOutletProducts);
 router.get("/outlet-orders/:id", isAuthenticated, getOutletOrders);
