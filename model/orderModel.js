@@ -72,6 +72,14 @@ const orderSchema = new mongoose.Schema({
         razorpay_id: { type: String },        // Razorpay payment id
         razorpay_orderId: { type: String },   // Razorpay order id
         razorpay_signature: { type: String }, // Razorpay signature
+
+        // Razorpay Payment Link session (outlet QR/link + delivery doorstep
+        // collection — see controller/rolePaymentController.js). The link is
+        // re-minted after link_expiresAt passes.
+        link_id: { type: String },
+        link_url: { type: String },
+        link_expiresAt: { type: Date },
+
         status: {
             type: String,
             enum: ["Pending", "Completed", "Failed", "Refunded"],

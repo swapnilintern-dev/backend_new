@@ -11,6 +11,12 @@ import outletRegister, {
     outletOrderHistory,
     outlet_login,
 } from "../controller/outletController.js";
+import {
+    outletCreatePaymentLink,
+    outletCreateRazorpay,
+    outletOrderStatus,
+    outletVerifyPayment,
+} from "../controller/rolePaymentController.js";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
 
 const router = express.Router();
@@ -36,6 +42,15 @@ router.get("/outlet-profile/:id", isAuthenticated, getOutletProfile);
 router.get("/outlet-products/:id", isAuthenticated, getOutletProducts);
 router.post("/outlet-allstocks/:id", isAuthenticated, getOutletProducts);
 router.get("/outlet-orders/:id", isAuthenticated, getOutletOrders);
+
+// --- Outlet role: payment collection (outlet session; order.outlet-scoped) ---
+// On-device checkout: razorpay → (razorpay_flutter sheet) → verify. QR / shared
+// link: payment → customer pays on their phone → status poll flips to PAID once
+// Razorpay confirms. The client never marks anything paid.
+router.post("/outlet/orders/:id/razorpay", isAuthenticated, outletCreateRazorpay);
+router.post("/outlet/orders/:id/verify", isAuthenticated, outletVerifyPayment);
+router.post("/outlet/orders/:id/payment", isAuthenticated, outletCreatePaymentLink);
+router.get("/outlet/orders/:id/status", isAuthenticated, outletOrderStatus);
 
 // --- Outlet role: server-side cart flow (used by the backend dev's own flow) -
 router.post("/outlet/add-cart", isAuthenticated, addToCart);

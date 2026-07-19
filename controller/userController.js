@@ -394,3 +394,148 @@ export const deleteAccount = async (req, res) => {
       });
   }
 }
+
+
+// -----------------------------------------------------------------------------
+// ADDRESS BOOK (customer app) — the buyer's saved delivery addresses, stored on
+// their own Vendor document. All four are scoped to the token's user; nobody
+// can read or edit another account's addresses.
+//   GET    /vsArogya/addresses            → { success, addresses }
+//   POST   /vsArogya/addresses            → create   (body = address fields)
+//   PUT    /vsArogya/addresses/:addressId → update / set default
+//   DELETE /vsArogya/addresses/:addressId → remove
+// -----------------------------------------------------------------------------
+
+// Keeps at most one default: marking one address default unmarks the rest.
+const applyDefault = (vendor, defaultId) => {
+  vendor.addresses.forEach((a) => {
+    a.isDefault = a._id.toString() === defaultId;
+  });
+};
+
+export const getAddresses = async (req, res) => {
+  try {
+    const vendor = await Vendor.findById(req.id).select("addresses");
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    return res.status(200).json({ success: true, addresses: vendor.addresses });
+  } catch (er) {
+    console.log("getAddresses error:", er);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const addAddress = async (req, res) => {
+  try {
+    const { label, fullName, phone, line1, city, state, pincode, isDefault } = req.body;
+    if (!line1 || !String(line1).trim()) {
+      return res.status(400).json({ success: false, message: "Address line is required" });
+    }
+
+    const vendor = await Vendor.findById(req.id);
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    vendor.addresses.push({
+      label: label || "Home",
+      fullName: fullName || "",
+      phone: phone || "",
+      line1: String(line1).trim(),
+      city: city || "",
+      state: state || "",
+      pincode: pincode || "",
+      isDefault: false
+    });
+
+    const created = vendor.addresses[vendor.addresses.length - 1];
+    // First address (or an explicit request) becomes the default.
+    if (isDefault === true || vendor.addresses.length === 1) {
+      applyDefault(vendor, created._id.toString());
+    }
+    await vendor.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Address saved",
+      address: created,
+      addresses: vendor.addresses
+    });
+  } catch (er) {
+    console.log("addAddress error:", er);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const updateAddress = async (req, res) => {
+  try {
+    const vendor = await Vendor.findById(req.id);
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const addr = vendor.addresses.id(req.params.addressId);
+    if (!addr) {
+      return res.status(404).json({ success: false, message: "Address not found" });
+    }
+
+    const { label, fullName, phone, line1, city, state, pincode, isDefault } = req.body;
+    if (line1 !== undefined) {
+      if (!String(line1).trim()) {
+        return res.status(400).json({ success: false, message: "Address line is required" });
+      }
+      addr.line1 = String(line1).trim();
+    }
+    if (label !== undefined) addr.label = label;
+    if (fullName !== undefined) addr.fullName = fullName;
+    if (phone !== undefined) addr.phone = phone;
+    if (city !== undefined) addr.city = city;
+    if (state !== undefined) addr.state = state;
+    if (pincode !== undefined) addr.pincode = pincode;
+    if (isDefault === true) applyDefault(vendor, addr._id.toString());
+
+    await vendor.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Address updated",
+      address: addr,
+      addresses: vendor.addresses
+    });
+  } catch (er) {
+    console.log("updateAddress error:", er);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const deleteAddress = async (req, res) => {
+  try {
+    const vendor = await Vendor.findById(req.id);
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const addr = vendor.addresses.id(req.params.addressId);
+    if (!addr) {
+      return res.status(404).json({ success: false, message: "Address not found" });
+    }
+
+    const wasDefault = addr.isDefault === true;
+    addr.deleteOne();
+    // Removing the default promotes the first remaining address.
+    if (wasDefault && vendor.addresses.length > 0) {
+      applyDefault(vendor, vendor.addresses[0]._id.toString());
+    }
+    await vendor.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Address removed",
+      addresses: vendor.addresses
+    });
+  } catch (er) {
+    console.log("deleteAddress error:", er);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

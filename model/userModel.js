@@ -123,6 +123,22 @@ const vendorSchema = new mongoose.Schema(
         ref: "product"
       }
     ],
+
+    // The buyer's saved delivery addresses (customer app address book).
+    // CRUD lives in userController (getAddresses / addAddress / updateAddress /
+    // deleteAddress) under /vsArogya/addresses.
+    addresses: [
+      {
+        label: { type: String, default: "Home" },
+        fullName: { type: String, default: "" },
+        phone: { type: String, default: "" },
+        line1: { type: String, required: true },
+        city: { type: String, default: "" },
+        state: { type: String, default: "" },
+        pincode: { type: String, default: "" },
+        isDefault: { type: Boolean, default: false }
+      }
+    ],
   },
   {
     timestamps: true,
