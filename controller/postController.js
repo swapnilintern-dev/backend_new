@@ -1,12 +1,80 @@
 import sharp from "sharp";
+import { Readable } from "stream";
 import cloudinary from "../utils/cloudinary.js";
 import Product from "../model/productModel.js";
 import Vendor from "../model/userModel.js";
+import { MAX_PRODUCT_IMAGES, MAX_IMAGE_BYTES } from "../middlewares/multer.js";
 
 // Naye saved/share controllers `product` (lowercase) aur `Vendor` reference
 // karte hain — pehle ye import hi nahi the → ReferenceError → 500.
 // `product` ko imported Product model ka alias bana do (same model).
 const product = Product;
+
+// ---------------------------------------------------------------------------
+// Media helpers (shared by add + update)
+// ---------------------------------------------------------------------------
+
+/// Optimizes an image buffer (resize + JPEG) and uploads it to Cloudinary.
+/// Returns the { url, publicId } pair persisted on the product.
+async function uploadImageBuffer(buffer) {
+  const optimized = await sharp(buffer)
+    .resize({ width: 800, height: 800, fit: "inside" })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  const fileUri = `data:image/jpeg;base64,${optimized.toString("base64")}`;
+  const res = await cloudinary.uploader.upload(fileUri, { folder: "products" });
+  return { url: res.secure_url, publicId: res.public_id };
+}
+
+/// Streams a (potentially large) video buffer to Cloudinary. Streaming avoids
+/// building a ~100 MB base64 data-URI in memory the way images do.
+function uploadVideoBuffer(buffer) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { resource_type: "video", folder: "product-videos" },
+      (err, res) => {
+        if (err) return reject(err);
+        resolve({ url: res.secure_url, publicId: res.public_id });
+      }
+    );
+    Readable.from(buffer).pipe(stream);
+  });
+}
+
+/// Best-effort delete of a Cloudinary asset — used so removed/replaced media
+/// never lingers as an orphan. Failures are logged, not fatal.
+async function destroyAsset(publicId, resourceType = "image") {
+  if (!publicId) return;
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+  } catch (e) {
+    console.warn("Cloudinary destroy failed:", publicId, e.message);
+  }
+}
+
+/// Collects the image files from a multer.fields() request, accepting both the
+/// new `images[]` field and the legacy single `image` field. Rejects any file
+/// larger than an image has any business being (a video-sized "image").
+function collectImageFiles(req) {
+  const files = [
+    ...((req.files && req.files.images) || []),
+    ...((req.files && req.files.image) || []),
+  ];
+  for (const f of files) {
+    if (f.size > MAX_IMAGE_BYTES) {
+      const err = new Error(`Image "${f.originalname}" exceeds 10 MB`);
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+  return files;
+}
+
+/// The single video file from a multer.fields() request, or null.
+function firstVideoFile(req) {
+  const v = req.files && req.files.video;
+  return v && v.length ? v[0] : null;
+}
 
 const addnewProduct = async (req, res) => {
   try {
@@ -34,17 +102,23 @@ const addnewProduct = async (req, res) => {
       packInfo,
     } = req.body;
 
-    console.log("Text Data:", req.body);
-
-    const image = req.file;
-
-    console.log("Image:", image);
+    // Media: up to MAX_PRODUCT_IMAGES images (field `images[]`, or the legacy
+    // single `image`) + one optional promotional video (field `video`).
+    const imageFiles = collectImageFiles(req);
+    const videoFile = firstVideoFile(req);
 
     // Validation
-    if (!image) {
+    if (imageFiles.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Image is required",
+        message: "At least one product image is required",
+      });
+    }
+
+    if (imageFiles.length > MAX_PRODUCT_IMAGES) {
+      return res.status(400).json({
+        success: false,
+        message: `A product can have at most ${MAX_PRODUCT_IMAGES} images`,
       });
     }
 
@@ -62,27 +136,11 @@ const addnewProduct = async (req, res) => {
       });
     }
 
-    // Optimize Image
-    const optimizedImgBuffer = await sharp(image.buffer)
-      .resize({
-        width: 800,
-        height: 800,
-        fit: "inside",
-      })
-      .jpeg({ quality: 80 })
-      .toBuffer();
-
-    // Buffer -> Data URI
-    const fileUri = `data:image/jpeg;base64,${optimizedImgBuffer.toString(
-      "base64"
-    )}`;
-
-    // Upload to Cloudinary
-    const cloudResponse = await cloudinary.uploader.upload(fileUri, {
-      folder: "products",
-    });
-
-    console.log("Cloudinary Response:", cloudResponse);
+    // Upload every image (order preserved) and the video, in parallel.
+    const image = await Promise.all(
+      imageFiles.map((f) => uploadImageBuffer(f.buffer))
+    );
+    const video = videoFile ? await uploadVideoBuffer(videoFile.buffer) : undefined;
 
     // Multipart sends everything as strings — parse numbers/booleans safely.
     const num = (v, d = undefined) =>
@@ -113,12 +171,8 @@ const addnewProduct = async (req, res) => {
       reviewCount: num(reviewCount, 0),
       badge: badge || undefined,
       packInfo: packInfo || "",
-      image: [
-        {
-          url: cloudResponse.secure_url,
-          publicId: cloudResponse.public_id,
-        },
-      ],
+      image, // array of { url, publicId } — first entry is the primary image
+      video, // { url, publicId } or undefined
     });
 
     return res.status(201).json({
@@ -157,6 +211,15 @@ export const deleteProduct = async (req, res) => {
           message: " Product not found ",
           success: false
         });
+    }
+
+    // Orphan cleanup: remove the product's images + video from Cloudinary
+    // before dropping the document.
+    for (const img of get_product.image || []) {
+      await destroyAsset(img.publicId, "image");
+    }
+    if (get_product.video && get_product.video.publicId) {
+      await destroyAsset(get_product.video.publicId, "video");
     }
 
     await Product.findByIdAndDelete(product_id);
@@ -243,15 +306,93 @@ export const updateProduct = async (req, res) => {
     setIf("active", bool(b.active));
     setIf("prescriptionRequired", bool(b.prescriptionRequired));
 
-    // Optional new image
-    if (req.file) {
-      const optimized = await sharp(req.file.buffer)
-        .resize({ width: 800, height: 800, fit: "inside" })
-        .jpeg({ quality: 80 })
-        .toBuffer();
-      const uri = `data:image/jpeg;base64,${optimized.toString("base64")}`;
-      const cloud = await cloudinary.uploader.upload(uri, { folder: "products" });
-      existing.image = [{ url: cloud.secure_url, publicId: cloud.public_id }];
+    // ---- Images ------------------------------------------------------------
+    // The client sends `keptImages` — a JSON array of the existing images it
+    // wants to keep, in the desired display order — plus any brand-new files in
+    // the `images[]` field. We only touch images when the client signals intent
+    // (sends keptImages OR uploads new files); a plain field update (e.g. an
+    // active-toggle) leaves the media untouched.
+    const newImageFiles = collectImageFiles(req);
+    const hasKeptField = b.keptImages !== undefined;
+
+    if (hasKeptField || newImageFiles.length > 0) {
+      let kept = [];
+      if (hasKeptField) {
+        let parsed;
+        try {
+          parsed = JSON.parse(b.keptImages || "[]");
+        } catch {
+          return res.status(400).json({
+            success: false,
+            message: "keptImages must be a JSON array",
+          });
+        }
+        const keptIds = new Set(
+          (Array.isArray(parsed) ? parsed : [])
+            .map((it) => (it && it.publicId ? String(it.publicId) : null))
+            .filter(Boolean)
+        );
+        // Keep the existing sub-docs the client listed, in the ORDER the client
+        // gave (supports reordering) — resolved against the DB so a client can't
+        // inject arbitrary urls.
+        const byId = new Map(
+          (existing.image || []).map((img) => [String(img.publicId), img])
+        );
+        kept = (Array.isArray(parsed) ? parsed : [])
+          .map((it) => byId.get(String(it && it.publicId)))
+          .filter(Boolean)
+          .map((img) => ({ url: img.url, publicId: img.publicId }));
+      } else {
+        // New files uploaded but no keptImages field → keep all current images.
+        kept = (existing.image || []).map((img) => ({
+          url: img.url,
+          publicId: img.publicId,
+        }));
+      }
+
+      // Orphan cleanup: delete any existing image the client dropped.
+      const keepIds = new Set(kept.map((k) => String(k.publicId)));
+      for (const img of existing.image || []) {
+        if (!keepIds.has(String(img.publicId))) {
+          await destroyAsset(img.publicId, "image");
+        }
+      }
+
+      // Upload new files (order preserved) and append after the kept ones.
+      const uploaded = await Promise.all(
+        newImageFiles.map((f) => uploadImageBuffer(f.buffer))
+      );
+      const finalImages = [...kept, ...uploaded];
+
+      if (finalImages.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "A product must keep at least one image",
+        });
+      }
+      if (finalImages.length > MAX_PRODUCT_IMAGES) {
+        return res.status(400).json({
+          success: false,
+          message: `A product can have at most ${MAX_PRODUCT_IMAGES} images`,
+        });
+      }
+      existing.image = finalImages;
+    }
+
+    // ---- Video -------------------------------------------------------------
+    // removeVideo=true → delete it. A new `video` file → replace it (old one is
+    // deleted first). Neither → leave the current video as-is.
+    const videoFile = firstVideoFile(req);
+    const removeVideo = b.removeVideo === "true" || b.removeVideo === true;
+    const currentVideoId = existing.video && existing.video.publicId;
+
+    if (videoFile) {
+      if (currentVideoId) await destroyAsset(currentVideoId, "video");
+      existing.video = await uploadVideoBuffer(videoFile.buffer);
+    } else if (removeVideo) {
+      if (currentVideoId) await destroyAsset(currentVideoId, "video");
+      existing.video = undefined;
+      existing.markModified("video");
     }
 
     await existing.save();

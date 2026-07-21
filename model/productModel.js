@@ -45,12 +45,24 @@ const productSchema = new mongoose.Schema({
     reviewCount: { type: Number, default: 0 },
     badge: { type: String },
     packInfo: { type: String, default: "" },
+    // Product images. Historically a single-element array; now holds up to
+    // kMaxProductImages entries (see controller). Kept as `image` — NOT renamed
+    // to `images` — so every existing consumer (customer/admin/outlet/vendor)
+    // that already reads `image[0].url` keeps working with no migration. The
+    // FIRST entry is treated as the primary/thumbnail image everywhere.
     image:[
         {
             url : String ,
-            publicId : String 
+            publicId : String
         }
     ],
+    // Optional single promotional video (Cloudinary, resource_type "video").
+    // `publicId` is stored so the video can be deleted/replaced without leaving
+    // an orphan asset behind.
+    video: {
+        url: { type: String },
+        publicId: { type: String },
+    },
     quantity:{
         type : String ,
         default :"1"
