@@ -3,6 +3,7 @@ import outletRegister, {
     addOutletStock,
     addToCart,
     cartSummary,
+    clearOutletCart,
     getOutlets,
     getOutletOrders,
     getOutletProducts,
@@ -55,6 +56,7 @@ router.get("/outlet/orders/:id/status", isAuthenticated, outletOrderStatus);
 // --- Outlet role: server-side cart flow (used by the backend dev's own flow) -
 router.post("/outlet/add-cart", isAuthenticated, addToCart);
 router.get("/outlet/cart-summary", isAuthenticated, cartSummary);
+router.post("/outlet/clear-cart", isAuthenticated, clearOutletCart);
 router.post("/outlet/manual-order/:id", isAuthenticated, outletManualOrder);
 router.get("/outlet/order-history", isAuthenticated, outletOrderHistory);
 

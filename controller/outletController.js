@@ -651,6 +651,44 @@ export const outletManualOrder = async (req, res) => {
 };
 
 
+// -----------------------------------------------------------------------------
+// Empties the signed-in outlet's server-side cart. Additive helper for the POS
+// Billing flow: the app resets the cart before building a fresh bill so an
+// earlier, interrupted bill can never contaminate the next one. Safe no-op when
+// the cart is already empty. Does not touch any existing behaviour.
+//   POST /vsArogya/outlet/clear-cart
+// -----------------------------------------------------------------------------
+export const clearOutletCart = async (req, res) => {
+    try {
+        const outletId = req.id;
+
+        const outlet = await Outlet.findById(outletId);
+        if (!outlet) {
+            return res.status(404).json({
+                success: false,
+                message: "Outlet not found"
+            });
+        }
+
+        outlet.cart = [];
+        await outlet.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Cart cleared",
+            cart: outlet.cart
+        });
+
+    } catch (error) {
+        console.log("clearOutletCart error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+};
+
+
 export const outletOrderHistory = async (req, res) => {
     try {
 
