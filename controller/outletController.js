@@ -689,6 +689,225 @@ export const clearOutletCart = async (req, res) => {
 };
 
 
+// -----------------------------------------------------------------------------
+// POS BILLING — creates a walk-in counter bill directly from inline line items +
+// the customer's details, WITHOUT needing a pre-registered vendor. This lets the
+// app place the bill (and generate the invoice) instantly while the customer's
+// vendor registration is submitted separately in the background. It deducts
+// outlet stock and renders the invoice from the same HTML template.
+// Additive: does not touch outletManualOrder or any existing behaviour.
+//   POST /vsArogya/outlet/bill   body: { customer, items: [{ productId, quantity }] }
+// -----------------------------------------------------------------------------
+export const outletBillingOrder = async (req, res) => {
+    try {
+        const outletId = req.id;
+        const { customer, items } = req.body;
+
+        const outlet = await Outlet.findById(outletId);
+        if (!outlet) {
+            return res.status(404).json({
+                success: false,
+                message: "Outlet not found"
+            });
+        }
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No items to bill"
+            });
+        }
+
+        // 1. Resolve every line, checking outlet stock, before touching anything.
+        let totalAmount = 0;
+        let total_qty = 0;
+        const orderItems = [];
+        const lineSnapshots = []; // { product doc, quantity } for the invoice
+
+        for (const it of items) {
+            const qty = Number(it.quantity);
+            if (!Number.isFinite(qty) || qty <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid quantity in the bill"
+                });
+            }
+
+            const p = await product.findById(it.productId);
+            if (!p) {
+                return res.status(404).json({
+                    success: false,
+                    message: "A billed product no longer exists"
+                });
+            }
+
+            const stock = await outletStock.findOne({
+                outlet: outletId,
+                product: it.productId
+            });
+            if (!stock || stock.quantity < qty) {
+                return res.status(400).json({
+                    success: false,
+                    message: `${p.title} has only ${stock ? stock.quantity : 0} in stock`
+                });
+            }
+
+            orderItems.push({ product: p._id, quantity: qty, orderPrice: p.price });
+            lineSnapshots.push({ product: p, quantity: qty });
+            totalAmount += p.price * qty;
+            total_qty += qty;
+        }
+
+        const amountWord = converter.toWords(totalAmount);
+
+        // 2. Deduct outlet stock (guarded above so it never goes negative).
+        for (const it of items) {
+            await outletStock.updateOne(
+                { outlet: outletId, product: it.productId },
+                { $inc: { quantity: -Number(it.quantity) } }
+            );
+        }
+
+        const orderNo =
+            "ORD-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+
+        // Bill-to / ship-to: the walk-in customer's details when given, else the
+        // outlet's own (so the required shippingAddress fields are always set).
+        const c = customer || {};
+        const shippingAddress = {
+            address: c.address || outlet.address,
+            city: c.city || outlet.city,
+            state: c.state || outlet.state,
+            pincode: c.pincode || outlet.pincode,
+            country: "India",
+            phoneNo: c.phone || outlet.mobileNo
+        };
+
+        // 3. Create the order.
+        const createOrder = await order.create({
+            outlet: outletId,
+            orderItems,
+            shippingAddress,
+            totalAmount,
+            amountWord: `${amountWord} Rupees Only`,
+            paymentMethod: "COD",
+            orderStatus: "Pending",
+            orderType: "Outlet",
+            orderNo
+        });
+
+        // Respond immediately — the invoice renders below without blocking.
+        res.status(201).json({
+            success: true,
+            message: "Bill created successfully",
+            createOrder
+        });
+
+        // 4. Invoice (best-effort, after the response) billed to the customer.
+        try {
+            const invoiceNumber = `INV-${Date.now()}`;
+            const gstSlabs = { 5: 0, 12: 0, 18: 0, 28: 0 };
+
+            for (let i = 0; i < lineSnapshots.length; i++) {
+                const gst = Number(lineSnapshots[i].product.gstPercent) || 0;
+                const item_price = lineSnapshots[i].product.price;
+                const item_qty = lineSnapshots[i].quantity;
+                const itemTotal = item_price * item_qty;
+                if (gstSlabs[gst] !== undefined) {
+                    gstSlabs[gst] += itemTotal - itemTotal / (1 + gst / 100);
+                }
+            }
+
+            const totalgst =
+                gstSlabs[5] + gstSlabs[12] + gstSlabs[18] + gstSlabs[28];
+
+            const customerName = c.firm || c.name || "Walk-in Customer";
+            const customerAddress =
+                [c.address, c.city, c.state, c.pincode]
+                    .filter(Boolean)
+                    .join(", ") || outlet.address || "";
+
+            const invoiceData = {
+                shop_name: customerName,
+                shop_address: customerAddress,
+                gst_in: c.gstin || "N/A",
+                order_no: orderNo,
+                order_date: new Date().toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric"
+                }),
+                invoice_no: invoiceNumber,
+                invoice_date: new Date().toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric"
+                }),
+                items: lineSnapshots.map(item => ({
+                    title: item.product.title,
+                    hsnCode: item.product.hsnCode || "N/A",
+                    mrp: item.product.mrp,
+                    gstPercent: item.product.gstPercent,
+                    disPercent: item.product.discountPercent || "N/A",
+                    manufacturer: item.product.manufacturer || "N/A",
+                    marketedBy: item.product.marketedBy || "N/A",
+                    batch_no: item.product.batch_no || "N/A",
+                    exp_date: item.product.exp_date || "N/A",
+                    quantity: item.quantity,
+                    price: item.product.price,
+                    amount: item.product.price * item.quantity
+                })),
+                total_item: lineSnapshots.length,
+                total_qty,
+                gross_total: totalAmount,
+                round_off: (Math.round(totalAmount) - totalAmount).toFixed(2),
+                amount_words: amountWord,
+                amount: totalAmount,
+                gst_5: gstSlabs[5].toFixed(2),
+                gst_12: gstSlabs[12].toFixed(2),
+                gst_18: gstSlabs[18].toFixed(2),
+                gst_28: gstSlabs[28].toFixed(2),
+                gst_total: totalgst.toFixed(2),
+                total_cgst: (totalgst / 2).toFixed(2),
+                total_sgst: (totalgst / 2).toFixed(2)
+            };
+
+            const html = generateInvoiceHTML(invoiceData);
+            const pdfBuffer = await generatePDF(html);
+
+            const result = await new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { resource_type: "auto", folder: "invoices" },
+                    (err, uploaded) => (err ? reject(err) : resolve(uploaded))
+                );
+                stream.end(pdfBuffer);
+            });
+
+            const createdInvoice = await Invoice.create({
+                invoiceNumber,
+                order: createOrder._id,
+                pdfUrl: result.secure_url
+            });
+
+            createOrder.invoice = createdInvoice._id;
+            await createOrder.save();
+
+            console.log("Billing invoice generated:", createdInvoice._id);
+
+        } catch (er) {
+            console.log("er from POS billing invoice gen:", er);
+        }
+
+    } catch (error) {
+        console.log("Outlet Billing Order Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+};
+
+
 export const outletOrderHistory = async (req, res) => {
     try {
 

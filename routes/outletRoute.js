@@ -8,6 +8,7 @@ import outletRegister, {
     getOutletOrders,
     getOutletProducts,
     getOutletProfile,
+    outletBillingOrder,
     outletManualOrder,
     outletOrderHistory,
     outlet_login,
@@ -57,6 +58,7 @@ router.get("/outlet/orders/:id/status", isAuthenticated, outletOrderStatus);
 router.post("/outlet/add-cart", isAuthenticated, addToCart);
 router.get("/outlet/cart-summary", isAuthenticated, cartSummary);
 router.post("/outlet/clear-cart", isAuthenticated, clearOutletCart);
+router.post("/outlet/bill", isAuthenticated, outletBillingOrder);
 router.post("/outlet/manual-order/:id", isAuthenticated, outletManualOrder);
 router.get("/outlet/order-history", isAuthenticated, outletOrderHistory);
 
