@@ -98,7 +98,10 @@ export const manualOrder = async (req, res) => {
         const orderItems = user.cart.map(item => ({
             product: item.product._id,
             quantity: item.quantity,
-            orderPrice: item.product.price
+            orderPrice: item.product.price,
+            // Snapshot the sold batch so the invoice never re-reads a later one.
+            batch_no: item.product.batch_no,
+            exp_date: item.product.exp_date
         }));
 
         const totalAmount = user.cart.reduce(

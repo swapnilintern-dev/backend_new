@@ -33,6 +33,18 @@ const orderSchema = new mongoose.Schema({
             orderPrice: {
                 type: Number,
                 required: true
+            },
+
+            // Batch + expiry SNAPSHOTTED at order creation from the product that
+            // was actually sold. The invoice reads these first (falling back to
+            // the product only for pre-snapshot orders) so a later batch edit on
+            // the product never rewrites a historical invoice. Optional →
+            // existing orders without them still work.
+            batch_no: {
+                type: String
+            },
+            exp_date: {
+                type: Date
             }
         }
     ],

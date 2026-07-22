@@ -96,8 +96,11 @@ export const generateInvoiceForOrder = async (orderId) => {
                 disPercent: it.product?.discountPercent || "N/A",
                 manufacturer: it.product?.manufacturer || "N/A",
                 marketedBy: it.product?.marketedBy || "N/A",
-                batch_no: it.product?.batch_no || "N/A",
-                exp_date: it.product?.exp_date || "N/A",
+                // Prefer the batch SNAPSHOTTED on the order line (the batch that
+                // was actually sold); fall back to the product only for orders
+                // placed before snapshotting existed, then to "N/A".
+                batch_no: it.batch_no || it.product?.batch_no || "N/A",
+                exp_date: it.exp_date || it.product?.exp_date || "N/A",
                 quantity: it.quantity,
                 price: it.orderPrice ?? it.product?.price,
                 amount: lineAmount(it),

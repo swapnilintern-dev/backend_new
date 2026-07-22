@@ -59,7 +59,10 @@ export const placeOrder = async (req, res) => {
 
             product: item.product._id,
             quantity: item.quantity,
-            orderPrice: item.product.price
+            orderPrice: item.product.price,
+            // Snapshot the sold batch so the invoice never re-reads a later one.
+            batch_no: item.product.batch_no,
+            exp_date: item.product.exp_date
 
         }));
 
@@ -345,7 +348,10 @@ export const placeSingleOrder = async (req, res) => {
 
             product: Product._id,
             quantity: 1,
-            orderPrice: Product.price
+            orderPrice: Product.price,
+            // Snapshot the sold batch so the invoice never re-reads a later one.
+            batch_no: Product.batch_no,
+            exp_date: Product.exp_date
 
         }];
 

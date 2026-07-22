@@ -455,7 +455,10 @@ export const outletManualOrder = async (req, res) => {
             return {
                 product: item.product._id,
                 quantity: item.quantity,
-                orderPrice: item.product.price
+                orderPrice: item.product.price,
+                // Snapshot the sold batch so the invoice never re-reads a later one.
+                batch_no: item.product.batch_no,
+                exp_date: item.product.exp_date
             };
         });
 
@@ -753,7 +756,7 @@ export const outletBillingOrder = async (req, res) => {
                 });
             }
 
-            orderItems.push({ product: p._id, quantity: qty, orderPrice: p.price });
+            orderItems.push({ product: p._id, quantity: qty, orderPrice: p.price, batch_no: p.batch_no, exp_date: p.exp_date });
             lineSnapshots.push({ product: p, quantity: qty });
             totalAmount += p.price * qty;
             total_qty += qty;
