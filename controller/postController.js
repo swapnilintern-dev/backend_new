@@ -100,6 +100,8 @@ const addnewProduct = async (req, res) => {
       reviewCount,
       badge,
       packInfo,
+      batch_no,
+      exp_date,
     } = req.body;
 
     // Media: up to MAX_PRODUCT_IMAGES images (field `images[]`, or the legacy
@@ -133,6 +135,37 @@ const addnewProduct = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Price is required",
+      });
+    }
+
+    // --- Batch & expiry (Feature 1/9) — both mandatory on a NEW medicine ---
+    if (!batch_no || !String(batch_no).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Batch number is required",
+      });
+    }
+    if (!exp_date) {
+      return res.status(400).json({
+        success: false,
+        message: "Expiry date is required",
+      });
+    }
+    const parsedExpiry = new Date(exp_date);
+    if (isNaN(parsedExpiry.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid expiry date",
+      });
+    }
+    // Reject an already-expired date when ADDING new stock. Historical dates
+    // are only allowed through the edit flow (updateProduct has no past guard).
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    if (parsedExpiry < startOfToday) {
+      return res.status(400).json({
+        success: false,
+        message: "Expiry date cannot be in the past",
       });
     }
 
@@ -171,6 +204,8 @@ const addnewProduct = async (req, res) => {
       reviewCount: num(reviewCount, 0),
       badge: badge || undefined,
       packInfo: packInfo || "",
+      batch_no: String(batch_no).trim(),
+      exp_date: parsedExpiry,
       image, // array of { url, publicId } — first entry is the primary image
       video, // { url, publicId } or undefined
     });
@@ -305,6 +340,21 @@ export const updateProduct = async (req, res) => {
     setIf("reviewCount", num(b.reviewCount));
     setIf("active", bool(b.active));
     setIf("prescriptionRequired", bool(b.prescriptionRequired));
+    setIf("batch_no", str(b.batch_no));
+
+    // Expiry: parse to a Date when the client sends one. No past-date guard
+    // here on purpose — editing a medicine may legitimately correct historical
+    // batch data. An unparseable value is rejected outright.
+    if (b.exp_date !== undefined && b.exp_date !== "") {
+      const d = new Date(b.exp_date);
+      if (isNaN(d.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid expiry date",
+        });
+      }
+      existing.exp_date = d;
+    }
 
     // ---- Images ------------------------------------------------------------
     // The client sends `keptImages` — a JSON array of the existing images it

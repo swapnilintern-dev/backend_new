@@ -70,6 +70,28 @@ const productSchema = new mongoose.Schema({
 
 } ,{timestamps: true} ) ;
 
+// --- Live expiry flag (Feature 2/4) --------------------------------------
+// Computed on EVERY serialization from the CURRENT server date, so it stays
+// accurate on its own — no cron, no timer, no DB write. True when the product
+// carries an expiry date that is within the next 90 days (or already past).
+// Only the Marketing & Outlet UIs render a warning from it; every other role
+// simply ignores the field, so it is safe to expose everywhere.
+productSchema.virtual("isExpiringSoon").get(function () {
+    if (!this.exp_date) return false;
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysLeft = Math.ceil(
+        (new Date(this.exp_date).getTime() - Date.now()) / msPerDay
+    );
+    return daysLeft <= 90;
+});
+
+// Emit virtuals so `isExpiringSoon` rides along in every product response
+// (getAllProducts, populated order/outlet products, …) with no per-controller
+// change. Only ADDS fields (isExpiringSoon + the default `id`) — existing
+// consumers that read `_id`/`image`/… are unaffected.
+productSchema.set("toJSON", { virtuals: true });
+productSchema.set("toObject", { virtuals: true });
+
 const product = mongoose.model('product' , productSchema ) ;
 
 export default product ;
