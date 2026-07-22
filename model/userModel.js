@@ -71,8 +71,27 @@ const vendorSchema = new mongoose.Schema(
       type: String,
     },
 
+    // GST certificate NUMBER (not a file). Captured as plain text — e.g. by the
+    // Outlet Billing registration, which no longer uploads a GST PDF.
+    gst_no: {
+      type: String,
+      trim: true,
+    },
+
     drug_lic_ex_date: {
       type: Date,
+    },
+
+    // Where this vendor was registered from:
+    //   "admin"  → the normal admin/marketing vendor registration (default; also
+    //              the implicit value for pre-existing documents that predate
+    //              this field — they are treated as "admin").
+    //   "outlet" → created through the Outlet Billing (POS) flow. Only these
+    //              show the "Registered by Outlet" badge in the admin portal.
+    registrationSource: {
+      type: String,
+      enum: ["admin", "outlet"],
+      default: "admin",
     },
 
     password: {

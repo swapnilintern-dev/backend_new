@@ -12,6 +12,7 @@ import outletRegister, {
     outletManualOrder,
     outletOrderHistory,
     outlet_login,
+    registerOutletVendor,
 } from "../controller/outletController.js";
 import {
     outletCreatePaymentLink,
@@ -59,6 +60,10 @@ router.post("/outlet/add-cart", isAuthenticated, addToCart);
 router.get("/outlet/cart-summary", isAuthenticated, cartSummary);
 router.post("/outlet/clear-cart", isAuthenticated, clearOutletCart);
 router.post("/outlet/bill", isAuthenticated, outletBillingOrder);
+// Outlet → Admin vendor registration request (JSON, no uploads). Files a
+// PENDING vendor tagged registrationSource:"outlet" for the existing approval
+// flow; the billing invoice is generated independently by /outlet/bill above.
+router.post("/outlet/register-vendor", isAuthenticated, registerOutletVendor);
 router.post("/outlet/manual-order/:id", isAuthenticated, outletManualOrder);
 router.get("/outlet/order-history", isAuthenticated, outletOrderHistory);
 

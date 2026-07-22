@@ -9,6 +9,7 @@ import { generatePDF } from "../utils/generatePdf.js";
 import cloudinary from "../utils/cloudinary.js";
 import order from "../model/orderModel.js";
 import Invoice from "../model/invoiceModel.js";
+import nodemailer from "nodemailer";
 
 
 const outletRegister = async (req, res) => {
@@ -1029,6 +1030,153 @@ export const getOutletOrders = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Internal Server Error"
+        });
+    }
+};
+
+// =============================================================================
+// Outlet Billing → Vendor registration request (JSON, NO file uploads)
+//
+// The Outlet Billing (POS) flow used to reuse the multipart /register-vendor
+// endpoint, which demanded a store photo + drug-license/GST PDFs. Outlet counters
+// only capture the GST + drug-license NUMBERS, so this endpoint accepts a plain
+// JSON body — no multer, no Cloudinary — and files a normal PENDING vendor for
+// the existing Admin approval workflow (adminController.statusApproval), tagged
+// registrationSource:"outlet". After the admin approves, the vendor logs in
+// through the unchanged /vsArogya/login (approvalStatus gate + emailed password),
+// exactly like an admin-registered vendor.
+//
+// The billing invoice is generated separately (outletBillingOrder) and never
+// depends on this call, so a registration failure never blocks the bill.
+// =============================================================================
+export const registerOutletVendor = async (req, res) => {
+    try {
+        const {
+            vendor_type,
+            shop_type,
+            store_name,
+            contact_person_name,
+            mobile_no,
+            email,
+            full_address,
+            city,
+            state,
+            pin_code,
+            gst_status,
+            gst_no,
+            drug_lic_no,
+            drug_lic_ex_date,
+        } = req.body || {};
+
+        // --- Validation (Req 10) — required fields, meaningful messages -------
+        const missing = [];
+        if (!contact_person_name) missing.push("Vendor Name");
+        if (!store_name) missing.push("Firm Name");
+        if (!gst_no) missing.push("GST Number");
+        if (!drug_lic_no) missing.push("Drug License Number");
+        if (!mobile_no) missing.push("Mobile Number");
+        if (!email) missing.push("Email");
+        if (!full_address) missing.push("Address");
+        if (!pin_code) missing.push("PIN Code");
+        if (!city) missing.push("City");
+        if (!state) missing.push("State");
+
+        if (missing.length) {
+            return res.status(400).json({
+                success: false,
+                message: `Please provide: ${missing.join(", ")}.`,
+            });
+        }
+
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const normalizedMobile = String(mobile_no).trim();
+
+        // --- Duplicate guards (Req 9 / Req 13 → 409) --------------------------
+        const existing = await Vendor.findOne({
+            $or: [{ email: normalizedEmail }, { mobile_no: normalizedMobile }],
+        });
+        if (existing) {
+            const dupField =
+                existing.email === normalizedEmail ? "email address" : "mobile number";
+            return res.status(409).json({
+                success: false,
+                message: `A vendor with this ${dupField} already exists.`,
+            });
+        }
+
+        // Credentials are generated now and emailed by the admin on approval —
+        // mirrors the existing registerVendor flow so login keeps working.
+        const autoPassword = String(Math.floor(1000 + Math.random() * 9000));
+
+        const vendor = await Vendor.create({
+            vendor_type,
+            shop_type,
+            store_name,
+            contact_person_name,
+            mobile_no: normalizedMobile,
+            email: normalizedEmail,
+            full_address,
+            city,
+            state,
+            pin_code,
+            // Keep the enum valid: a GST number implies a registered vendor.
+            gst_status: gst_status === "no" ? "no" : "yes",
+            gst_no,
+            drug_lic_no,
+            drug_lic_ex_date: drug_lic_ex_date || undefined,
+            password: autoPassword,
+            approvalStatus: "Pending",
+            registrationSource: "outlet",
+        });
+
+        // Confirmation email — non-fatal, exactly like the other register flows.
+        try {
+            const transporter = nodemailer.createTransport({
+                service: "gmail",
+                auth: { user: process.env.EMAIL, pass: process.env.E_PASS },
+            });
+            await transporter.sendMail({
+                from: process.env.EMAIL,
+                to: normalizedEmail,
+                subject: "Vendor Registration",
+                html: `
+        <h1>Hi ${contact_person_name}</h1>
+        <p>🎉 Your vendor registration has been received at a VS Arogya outlet counter.</p>
+        <p>Your application is currently under review.</p>
+        <p>We'll notify you via email once the verification process is complete.</p>
+        <p>Warm Regards,<br>Team: VS Arogya</p>
+        `,
+            });
+        } catch (mailErr) {
+            console.log("registerOutletVendor: email skipped:", mailErr?.message);
+        }
+
+        return res.status(201).json({
+            success: true,
+            message:
+                "Registration submitted for admin approval. Login details will be emailed once approved.",
+            vendor: {
+                _id: vendor._id,
+                store_name: vendor.store_name,
+                contact_person_name: vendor.contact_person_name,
+                mobile_no: vendor.mobile_no,
+                email: vendor.email,
+                approvalStatus: vendor.approvalStatus,
+                registrationSource: vendor.registrationSource,
+            },
+        });
+    } catch (error) {
+        console.log("registerOutletVendor error:", error);
+        // Mongo duplicate-key safety net (unique index race) → 409, not 500.
+        if (error && error.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message: "A vendor with this email or mobile number already exists.",
+            });
+        }
+        return res.status(500).json({
+            success: false,
+            message: "Could not submit the registration. Please try again.",
         });
     }
 };
