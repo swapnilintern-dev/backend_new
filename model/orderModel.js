@@ -45,7 +45,27 @@ const orderSchema = new mongoose.Schema({
             },
             exp_date: {
                 type: Date
-            }
+            },
+
+            // FEFO allocation breakdown — the exact batches (and how many units
+            // from each) this line consumed. Populated by the inventory engine
+            // at order creation; a single line can span multiple batches when
+            // the ordered quantity exceeds the nearest-expiry lot. The
+            // line-level batch_no/exp_date above mirror allocations[0] (the
+            // FEFO-front batch) for the existing invoice reader. Optional →
+            // pre-multi-batch orders (no allocations) still work; cancel/restore
+            // falls back to the batch_no snapshot for those.
+            allocations: [
+                {
+                    batch: {
+                        type: mongoose.Schema.Types.ObjectId,
+                        ref: "productBatch"
+                    },
+                    batch_number: { type: String },
+                    expiry_date: { type: Date },
+                    quantity: { type: Number }
+                }
+            ]
         }
     ],
 

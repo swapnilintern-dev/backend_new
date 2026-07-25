@@ -10,6 +10,11 @@ import cloudinary from "../utils/cloudinary.js";
 import order from "../model/orderModel.js";
 import Invoice from "../model/invoiceModel.js";
 import nodemailer from "nodemailer";
+import {
+    withInventoryTxn,
+    allocateFEFO,
+    InsufficientStockError,
+} from "../utils/inventory.js";
 
 
 const outletRegister = async (req, res) => {
@@ -195,45 +200,45 @@ export const addOutletStock = async (req, res) => {
         }
 
         // The catalog is the source: assigning stock to an outlet moves it OUT
-        // of the global product stock. Guard it in BOTH branches (new + existing
-        // outlet row), otherwise a first-time assignment would create stock from
-        // nothing and never deduct the catalog.
-        if (Product.stock < qty) {
-            return res.status(400).json({
-                success: false,
-                message: "Insufficient stock available"
-            });
-        }
-
+        // of the global product stock. This is the point where catalog batches
+        // are consumed FEFO — allocateFEFO drains the nearest-expiry lots first
+        // and keeps product.stock (the SUM mirror) in sync. The whole move
+        // (catalog consume + outlet credit) is one transaction so a short assign
+        // can never create outlet stock from nothing.
         const existingStock = await outletStock.findOne({
             product: productId,
             outlet: outletId
         });
 
-        Product.stock -= qty;
-        await Product.save();
+        let resultStock;
+        try {
+            resultStock = await withInventoryTxn(async (session) => {
+                await allocateFEFO(productId, qty, session);
 
-        if (existingStock) {
-            existingStock.quantity += qty;
-            await existingStock.save();
+                if (existingStock) {
+                    existingStock.quantity += qty;
+                    await existingStock.save({ session });
+                    return existingStock;
+                }
 
-            return res.status(200).json({
-                success: true,
-                message: "Stock updated successfully",
-                stock: existingStock
+                const created = await outletStock.create([{
+                    product: productId,
+                    outlet: outletId,
+                    quantity: qty
+                }], { session });
+                return created[0];
             });
+        } catch (err) {
+            if (err instanceof InsufficientStockError) {
+                return res.status(400).json({ success: false, message: err.message });
+            }
+            throw err;
         }
 
-        const stock = await outletStock.create({
-            product: productId,
-            outlet: outletId,
-            quantity: qty
-        });
-
-        return res.status(201).json({
+        return res.status(existingStock ? 200 : 201).json({
             success: true,
-            message: "Stock added successfully",
-            stock
+            message: existingStock ? "Stock updated successfully" : "Stock added successfully",
+            stock: resultStock
         });
 
     }

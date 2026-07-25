@@ -22,6 +22,7 @@ import manualRouter from "./routes/manualRoute.js"
 import xlshRouter from "./routes/xlshRoute.js"
 import outletRouter from "./routes/outletRoute.js"
 import marketing_agentRouter from "./routes/agentRoute.js";
+import batchRouter from "./routes/batchRoute.js";
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use('/vsArogya', manualRouter);
 app.use('/vsArogya', xlshRouter);
 app.use('/vsArogya', outletRouter);
 app.use('/vsArogya', marketing_agentRouter);
+app.use('/vsArogya', batchRouter);
 
 
 

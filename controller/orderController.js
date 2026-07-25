@@ -11,6 +11,12 @@ import Invoice from "../model/invoiceModel.js";
 import outletStock from "../model/outletStockModel.js";
 import { generatePDF } from "../utils/generatePdf.js";
 import cloudinary from "../utils/cloudinary.js";
+import {
+    withInventoryTxn,
+    allocateFEFO,
+    releaseStock,
+    InsufficientStockError,
+} from "../utils/inventory.js";
 
 
 export const placeOrder = async (req, res) => {
@@ -55,17 +61,6 @@ export const placeOrder = async (req, res) => {
             new Date().getFullYear() +
             Math.floor(100000 + Math.random() * 900000);
 
-        const orderItems = user.cart.map(item => ({
-
-            product: item.product._id,
-            quantity: item.quantity,
-            orderPrice: item.product.price,
-            // Snapshot the sold batch so the invoice never re-reads a later one.
-            batch_no: item.product.batch_no,
-            exp_date: item.product.exp_date
-
-        }));
-
         const total_qty = user.cart.reduce(
             (qty, item) => qty + item.quantity,
             0
@@ -76,29 +71,56 @@ export const placeOrder = async (req, res) => {
             total + item.product.price * item.quantity, 0
         )
 
-        for (let i = 0; i < user.cart.length; i++) {
-            user.cart[i].product.stock -= user.cart[i].quantity;
-            await user.cart[i].product.save();
-        }
-
-
         const amountWord = converter.toWords(totalAmount);
-        const Order = await order.create({
 
-            user: userId,
-            orderItems,
-            shippingAddress: {
-                address,
-                city,
-                state,
-                pincode,
-                country,
-                phoneNo
-            },
-            totalAmount,
-            orderNo,
-            amountWord,
-        });
+        // Allocate stock FEFO across each product's batches and create the order
+        // atomically. If any line is short the whole transaction rolls back — no
+        // oversell, no half-deducted order. allocations[] is snapshotted onto the
+        // line; batch_no/exp_date mirror the FEFO-front batch for the invoice.
+        let Order;
+        try {
+            Order = await withInventoryTxn(async (session) => {
+                const orderItems = [];
+                for (const item of user.cart) {
+                    const allocations = await allocateFEFO(
+                        item.product._id,
+                        item.quantity,
+                        session
+                    );
+                    orderItems.push({
+                        product: item.product._id,
+                        quantity: item.quantity,
+                        orderPrice: item.product.price,
+                        batch_no: allocations[0]?.batch_number ?? item.product.batch_no,
+                        exp_date: allocations[0]?.expiry_date ?? item.product.exp_date,
+                        allocations,
+                    });
+                }
+
+                const created = await order.create([{
+                    user: userId,
+                    orderItems,
+                    shippingAddress: {
+                        address,
+                        city,
+                        state,
+                        pincode,
+                        country,
+                        phoneNo
+                    },
+                    totalAmount,
+                    orderNo,
+                    amountWord,
+                }], { session });
+
+                return created[0];
+            });
+        } catch (err) {
+            if (err instanceof InsufficientStockError) {
+                return res.status(400).json({ message: err.message, success: false });
+            }
+            throw err;
+        }
 
 
 
@@ -344,39 +366,47 @@ export const placeSingleOrder = async (req, res) => {
                 });
 
 
-        const orderItems = [{
+        // Allocate 1 unit FEFO and create the order atomically. A sold-out
+        // product rolls the transaction back with a clean 400.
+        let singleOrder;
+        try {
+            singleOrder = await withInventoryTxn(async (session) => {
+                const allocations = await allocateFEFO(Product._id, 1, session);
 
-            product: Product._id,
-            quantity: 1,
-            orderPrice: Product.price,
-            // Snapshot the sold batch so the invoice never re-reads a later one.
-            batch_no: Product.batch_no,
-            exp_date: Product.exp_date
+                const orderItems = [{
+                    product: Product._id,
+                    quantity: 1,
+                    orderPrice: Product.price,
+                    batch_no: allocations[0]?.batch_number ?? Product.batch_no,
+                    exp_date: allocations[0]?.expiry_date ?? Product.exp_date,
+                    allocations,
+                }];
 
-        }];
+                const created = await order.create([{
+                    user: userId,
+                    orderItems,
+                    shippingAddress: {
+                        address,
+                        city,
+                        state,
+                        pincode,
+                        country,
+                        phoneNo
+                    },
+                    totalAmount: Product.price,
+                    // orderModel me amountWord required hai — iske bina yahan
+                    // ValidationError se order 500 ho jata tha.
+                    amountWord: converter.toWords(Product.price),
+                }], { session });
 
-        // console.log("orderitems array ", orderItems ) ;
-        Product.stock -= 1;
-        await Product.save();
-
-        const singleOrder = await order.create({
-
-            user: userId,
-            orderItems,
-            shippingAddress: {
-                address,
-                city,
-                state,
-                pincode,
-                country,
-                phoneNo
-            },
-            totalAmount: Product.price,
-            // orderModel me amountWord required hai — iske bina yahan
-            // ValidationError se order 500 ho jata tha.
-            amountWord: converter.toWords(Product.price),
-
-        });
+                return created[0];
+            });
+        } catch (err) {
+            if (err instanceof InsufficientStockError) {
+                return res.status(400).json({ message: err.message, success: false });
+            }
+            throw err;
+        }
 
         // await order.save() ;
 
@@ -469,13 +499,24 @@ export const cancelOrder = async (req, res) => {
                 );
             }
         } else {
-            for (let i = 0; i < existingOrder.orderItems.length; i++) {
-
-                existingOrder.orderItems[i].product.stock +=
-                    existingOrder.orderItems[i].quantity;
-
-                await existingOrder.orderItems[i].product.save();
-            }
+            // Catalog order: return the units to the exact batches they came
+            // from (via the line's allocations snapshot), atomically. Orders
+            // placed before multi-batch have no allocations — releaseStock then
+            // falls back to matching the line's batch_no snapshot.
+            await withInventoryTxn(async (session) => {
+                for (const item of existingOrder.orderItems) {
+                    const productId = item.product?._id || item.product;
+                    const entries =
+                        item.allocations && item.allocations.length
+                            ? item.allocations
+                            : {
+                                  batch_no: item.batch_no,
+                                  exp_date: item.exp_date,
+                                  quantity: item.quantity,
+                              };
+                    await releaseStock(productId, entries, session);
+                }
+            });
         }
 
         existingOrder.orderStatus = "Cancelled";

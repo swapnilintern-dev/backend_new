@@ -3,6 +3,11 @@ import Vendor from "../model/userModel.js";
 import outletStock from "../model/outletStockModel.js";
 import converter from "number-to-words";
 import generateInvoiceForOrder from "../utils/invoiceGenerator.js";
+import {
+    withInventoryTxn,
+    allocateFEFO,
+    InsufficientStockError,
+} from "../utils/inventory.js";
 
 // =============================================================================
 // Manual order — Marketing places an order on a specific (approved) vendor's
@@ -95,30 +100,35 @@ export const manualOrder = async (req, res) => {
             new Date().getFullYear() +
             Math.floor(100000 + Math.random() * 900000);
 
-        const orderItems = user.cart.map(item => ({
-            product: item.product._id,
-            quantity: item.quantity,
-            orderPrice: item.product.price,
-            // Snapshot the sold batch so the invoice never re-reads a later one.
-            batch_no: item.product.batch_no,
-            exp_date: item.product.exp_date
-        }));
-
         const totalAmount = user.cart.reduce(
             (total, item) => total + item.product.price * item.quantity,
             0
         );
 
+        const amountWord = converter.toWords(totalAmount);
+
+        const shippingAddress = {
+            address: user.full_address,
+            city: user.city,
+            state: user.state,
+            pincode: user.pin_code,
+            country: "IN",
+            phoneNo: user.mobile_no
+        };
+
         // Take the stock out of the right bucket.
         //
         // An OUTLET order sells stock the outlet already holds, and that stock
-        // LEFT the catalog when marketing assigned it (addOutletStock does
-        // `Product.stock -= qty`). Deducting product.stock again here would
-        // charge the catalog twice and leave outletStock.quantity untouched, so
-        // the outlet would keep showing stock it had already sold.
+        // LEFT the catalog when marketing assigned it (addOutletStock consumes
+        // catalog batches). Deducting the catalog again here would charge it
+        // twice and leave outletStock.quantity untouched, so the outlet would
+        // keep showing stock it had already sold — so the outlet branch draws
+        // the outlet's own (non-batched) pool, unchanged.
         //
         // A marketing order has no outlet and sells straight from the catalog —
-        // same as placeOrder (orderController) does for a vendor.
+        // same as placeOrder (orderController) does for a vendor: FEFO across
+        // the product's batches, atomically.
+        let Order;
         if (outletId) {
             // Check EVERY line before changing anything, so a short line can't
             // leave the order half-deducted.
@@ -143,33 +153,64 @@ export const manualOrder = async (req, res) => {
                 row.quantity -= qty;
                 await row.save();
             }
+
+            const orderItems = user.cart.map(item => ({
+                product: item.product._id,
+                quantity: item.quantity,
+                orderPrice: item.product.price,
+                // Snapshot the sold batch so the invoice never re-reads a later one.
+                batch_no: item.product.batch_no,
+                exp_date: item.product.exp_date
+            }));
+
+            Order = await order.create({
+                user: userId,
+                outlet: outletId,
+                orderItems,
+                shippingAddress,
+                totalAmount,
+                orderNo,
+                amountWord
+            });
         }
         else {
-            for (let i = 0; i < user.cart.length; i++) {
-                user.cart[i].product.stock -= user.cart[i].quantity;
-                await user.cart[i].product.save();
+            try {
+                Order = await withInventoryTxn(async (session) => {
+                    const orderItems = [];
+                    for (const item of user.cart) {
+                        const allocations = await allocateFEFO(
+                            item.product._id,
+                            item.quantity,
+                            session
+                        );
+                        orderItems.push({
+                            product: item.product._id,
+                            quantity: item.quantity,
+                            orderPrice: item.product.price,
+                            batch_no: allocations[0]?.batch_number ?? item.product.batch_no,
+                            exp_date: allocations[0]?.expiry_date ?? item.product.exp_date,
+                            allocations,
+                        });
+                    }
+
+                    const created = await order.create([{
+                        user: userId,
+                        orderItems,
+                        shippingAddress,
+                        totalAmount,
+                        orderNo,
+                        amountWord
+                    }], { session });
+
+                    return created[0];
+                });
+            } catch (err) {
+                if (err instanceof InsufficientStockError) {
+                    return res.status(400).json({ message: err.message, success: false });
+                }
+                throw err;
             }
         }
-
-
-        const amountWord = converter.toWords(totalAmount);
-
-        const Order = await order.create({
-            user: userId,
-            outlet: outletId || undefined,
-            orderItems,
-            shippingAddress: {
-                address: user.full_address,
-                city: user.city,
-                state: user.state,
-                pincode: user.pin_code,
-                country: "IN",
-                phoneNo: user.mobile_no
-            },
-            totalAmount,
-            orderNo,
-            amountWord
-        });
 
 
         // The order captured the cart — clear it now.
