@@ -41,13 +41,45 @@ export const generateInvoiceHTML = (data) => {
         return `${expMonths[d.getMonth()]}-${d.getFullYear()}`;
     };
 
+    // FREE GOODS quantity exactly as stored on the order line. Whole numbers
+    // print bare ("2"), decimal quantities keep their decimals ("1.5"), and a
+    // line with none prints "0" — the same "0 instead of a blank cell" rule the
+    // money() and discount columns already follow.
+    const freeQtyText = (value) => {
+        const n = Number(value) || 0;
+        return Number.isInteger(n) ? `${n}` : `${Number(n.toFixed(3))}`;
+    };
+
+    // "MFG/Mkt By" — manufacturer and marketed-by in ONE cell (they used to be
+    // two separate columns). Both values come straight from the product record;
+    // when they are the same firm it is printed once, and when they differ the
+    // marketer goes on a second line in the muted style already used elsewhere
+    // in the row. Missing/"N/A" on both sides falls back to "N/A".
+    const blankish = (value) => {
+        const text = (value ?? "").toString().trim();
+        return !text || text === "N/A" ? "" : text;
+    };
+    const mfgMktText = (item) => {
+        const mfr = blankish(item.manufacturer);
+        const mkt = blankish(item.marketedBy);
+
+        if (!mfr && !mkt) return "N/A";
+        if (!mfr) return mkt;
+        if (!mkt || mkt.toLowerCase() === mfr.toLowerCase()) return mfr;
+
+        return `${mfr}<br><span style="font-size: 9px; color: var(--text-muted);">Mkt: ${mkt}</span>`;
+    };
+
     const itemsHtml = data.items
         .map((item, index) => {
             // ---- Per-item GST maths (prices are GST-INCLUSIVE) ----
             // gstPercent : the product's GST rate (5 / 12 / 18 / 28)
-            // netRate    : selling price WITH GST already inside
+            // netRate    : selling price WITH GST already inside (not printed —
+            //              the column it used to fill now shows FREE GOODS)
             // baseRate   : price WITHOUT GST  =  netRate / (1 + gst/100)
             // lineGst    : GST money hidden inside this line's amount
+            // Free goods are handed over at no charge, so they take no part in
+            // any of this — the amount, GST and totals stay exactly as before.
             const gstPercent = Number(item.gstPercent) || 0;
             const netRate = Number(item.price) || 0;
             const baseRate = netRate / (1 + gstPercent / 100);
@@ -63,15 +95,14 @@ export const generateInvoiceHTML = (data) => {
 <tr class="item-row">
     <td>${index + 1}</td>
     <td class="left-align"><strong>${item.title}</strong><br><span style="font-size: 9px; color: var(--text-muted);">Batch: ${item.batch_no || "N/A"} | Exp: ${expText(item.exp_date)}</span></td>
+    <td>${mfgMktText(item)}</td>
     <td>${item.hsnCode || "N/A"}</td>
-    <td>${item.manufacturer || "N/A"}</td>
-    <td>${item.marketedBy || "N/A"}</td>
-    <td>${item.quantity}</td>
     <td>${money(item.mrp)}</td>
+    <td>${item.quantity}</td>
+    <td>${freeQtyText(item.freeQty)}</td>
     <td>${money(baseRate)}</td>
-    <td>${gstPercent}%<br><span style="font-size: 9px; color: var(--text-muted);">(${money(lineGst)})</span></td>
-    <td>${money(netRate)}</td>
     <td>${discount}</td>
+    <td>${gstPercent}%<br><span style="font-size: 9px; color: var(--text-muted);">(${money(lineGst)})</span></td>
     <td><strong>${money(lineAmount)}</strong></td>
 </tr>
 `;

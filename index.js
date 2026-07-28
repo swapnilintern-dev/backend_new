@@ -23,6 +23,8 @@ import xlshRouter from "./routes/xlshRoute.js"
 import outletRouter from "./routes/outletRoute.js"
 import marketing_agentRouter from "./routes/agentRoute.js";
 import batchRouter from "./routes/batchRoute.js";
+import notificationRouter from "./routes/notificationRoute.js";
+import { startNotificationScheduler } from "./utils/notificationScheduler.js";
 
 const app = express();
 
@@ -61,6 +63,7 @@ app.use('/vsArogya', xlshRouter);
 app.use('/vsArogya', outletRouter);
 app.use('/vsArogya', marketing_agentRouter);
 app.use('/vsArogya', batchRouter);
+app.use('/vsArogya', notificationRouter);
 
 
 
@@ -70,5 +73,9 @@ app.get('/', (req, res) => {
 
 app.listen(port, () => {
     connectDb();
+    // Scheduled sends, stuck-broadcast recovery, retry sweeps and device-token
+    // hygiene for the push notification system. Timer-based and unref'd, so it
+    // adds no request-path cost and never blocks shutdown.
+    startNotificationScheduler();
     console.log("Server is working ", port);
 })

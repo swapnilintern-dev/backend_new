@@ -3,15 +3,24 @@ import ProductBatch from "../model/productBatchModel.js";
 import {
     withInventoryTxn,
     recalcProductStock,
+    getSellableProductBatches,
+    previewProductAllocation,
+    normalizeAllocations,
+    InsufficientStockError,
 } from "../utils/inventory.js";
 
 // ===========================================================================
 // Batch CRUD — Marketing manages the inventory lots behind a product.
 //
-//   GET    /product/:id/batches   list all batches for a product
-//   POST   /product/:id/batches   add a new batch
-//   PUT    /batch/:batchId        edit a batch
-//   DELETE /batch/:batchId        delete a batch
+//   GET    /product/:id/batches            list all batches for a product
+//   POST   /product/:id/batches            add a new batch
+//   PUT    /batch/:batchId                 edit a batch
+//   DELETE /batch/:batchId                 delete a batch
+//
+// Read-only FEFO helpers — the batch pickers in Manual Order and Stock
+// Assignment call these so the app never computes inventory itself:
+//   GET    /product/:id/available-batches  sellable lots only, FEFO order
+//   POST   /allocate-preview               dry-run allocation (+ overrides)
 //
 // Every mutation runs in a transaction and recomputes the product's mirror
 // fields (stock = SUM(available_quantity); batch_no/exp_date = FEFO-front) so
@@ -79,6 +88,90 @@ export const getProductBatches = async (req, res) => {
         });
     } catch (err) {
         console.error("getProductBatches error:", err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// --- FEFO read-only helpers -------------------------------------------------
+
+/// The product's SELLABLE catalog batches (available > 0, not expired) in FEFO
+/// order — the nearest expiry first. This is what the Manual Order and Stock
+/// Assignment batch pickers list: an expired or emptied lot never appears, so
+/// it can never be selected.
+///   GET /vsArogya/product/:id/available-batches
+export const getProductAvailableBatches = async (req, res) => {
+    try {
+        const productId = req.params.id;
+        const product = await Product.findById(productId).lean();
+        if (!product) {
+            return res.status(404).json({ success: false, message: "Product not found" });
+        }
+
+        const batches = await getSellableProductBatches(productId);
+        const sellableStock = batches.reduce(
+            (sum, b) => sum + (Number(b.available_quantity) || 0),
+            0
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Available batches fetched successfully",
+            // Physical total (unchanged meaning) vs what can actually be sold.
+            stock: product.stock,
+            sellable_stock: sellableStock,
+            batches: batches.map((b) => ({
+                _id: b._id,
+                batch_number: b.batch_number,
+                expiry_date: b.expiry_date,
+                manufacturing_date: b.manufacturing_date,
+                available_quantity: b.available_quantity,
+                purchase_quantity: b.purchase_quantity,
+                purchase_price: b.purchase_price,
+                selling_price: b.selling_price,
+                supplier: b.supplier,
+                isExpiringSoon: b.isExpiringSoon,
+                created_at: b.createdAt,
+            })),
+        });
+    } catch (err) {
+        console.error("getProductAvailableBatches error:", err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+/// Non-mutating FEFO allocation of a requested quantity across a product's
+/// catalog batches, honouring any manual overrides. Returns the breakdown, how
+/// much is still unallocated, and the batches available to pick from.
+///   POST /vsArogya/allocate-preview  { productId, quantity, overrides? }
+export const productAllocatePreview = async (req, res) => {
+    try {
+        const { productId, quantity, overrides } = req.body || {};
+        if (!productId) {
+            return res.status(400).json({ success: false, message: "productId is required" });
+        }
+        const product = await Product.findById(productId).lean();
+        if (!product) {
+            return res.status(404).json({ success: false, message: "Product not found" });
+        }
+
+        const { allocations, remaining, availableBatches } =
+            await previewProductAllocation(
+                productId,
+                quantity,
+                normalizeAllocations(overrides)
+            );
+
+        return res.status(200).json({
+            success: true,
+            allocations,
+            remaining,
+            availableBatches,
+        });
+    } catch (err) {
+        if (err instanceof InsufficientStockError) {
+            return res.status(400).json({ success: false, message: err.message });
+        }
+        console.error("productAllocatePreview error:", err);
         return res.status(500).json({ success: false, message: err.message });
     }
 };

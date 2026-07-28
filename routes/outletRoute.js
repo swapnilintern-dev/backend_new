@@ -5,9 +5,11 @@ import outletRegister, {
     cartSummary,
     clearOutletCart,
     getOutlets,
+    getOutletAvailableBatches,
     getOutletOrders,
     getOutletProducts,
     getOutletProfile,
+    outletAllocatePreview,
     outletBillingOrder,
     outletManualOrder,
     outletOrderHistory,
@@ -59,6 +61,9 @@ router.get("/outlet/orders/:id/status", isAuthenticated, outletOrderStatus);
 router.post("/outlet/add-cart", isAuthenticated, addToCart);
 router.get("/outlet/cart-summary", isAuthenticated, cartSummary);
 router.post("/outlet/clear-cart", isAuthenticated, clearOutletCart);
+// FEFO batch allocation for POS billing (read-only preview + override picker).
+router.get("/outlet/product/:productId/available-batches", isAuthenticated, getOutletAvailableBatches);
+router.post("/outlet/allocate-preview", isAuthenticated, outletAllocatePreview);
 router.post("/outlet/bill", isAuthenticated, outletBillingOrder);
 // Outlet → Admin vendor registration request (JSON, no uploads). Files a
 // PENDING vendor tagged registrationSource:"outlet" for the existing approval

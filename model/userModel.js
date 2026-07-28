@@ -126,7 +126,33 @@ const vendorSchema = new mongoose.Schema(
         quantity: {
           type: Number,
           default: 1
-        }
+        },
+
+        // Free units for this line, set by staff on a manual (marketing-placed)
+        // order and copied onto the order line at placement — where the invoice
+        // reads it. Never charged for. Defaults to 0, so the vendor's own
+        // add-to-cart flow (which does not send it) behaves exactly as before.
+        freeQty: {
+          type: Number,
+          default: 0,
+          min: 0
+        },
+
+        // The catalog batches staff PINNED for this line on a manual order
+        // (manual FEFO override). Passed to the inventory engine at placement,
+        // which re-validates them against live availability and auto-fills any
+        // remainder FEFO. Empty → pure FEFO, which is how the vendor's own cart
+        // (it never sets this) has always behaved.
+        allocations: [
+          {
+            batch: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: "productBatch"
+            },
+            batch_number: { type: String },
+            quantity: { type: Number }
+          }
+        ]
       }
     ],
 
@@ -134,6 +160,15 @@ const vendorSchema = new mongoose.Schema(
       type: String,
       enum: ["Pending", "Approved", "Rejected"],
       default: "Pending"
+    },
+
+    // Account-level push opt-in. The marketing broadcast skips vendors who
+    // turned notifications off (their in-app notification center still fills,
+    // they just get no push). Defaults to true so existing documents — which
+    // don't have the field — are reachable without a migration.
+    notificationsEnabled: {
+      type: Boolean,
+      default: true
     },
 
     savedProducts: [

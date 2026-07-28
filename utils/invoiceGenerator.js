@@ -19,10 +19,22 @@ import order from "../model/orderModel.js";
 import Vendor from "../model/userModel.js";
 import invoice from "../model/invoiceModel.js";
 import { generateInvoiceHTML } from "../templates/invoiceTemplate.js";
+import { normalizeFreeQty } from "./freeGoods.js";
 import { generatePDF } from "./generatePdf.js";
 import cloudinary from "./cloudinary.js";
 
 const inr = { day: "2-digit", month: "long", year: "numeric" };
+
+/// The batch number(s) printed for an order line: every lot its FEFO allocation
+/// consumed, joined with " + ". Degrades to the line's single-batch snapshot and
+/// then the product's mirror, so pre-multi-batch orders print exactly as before.
+const allocatedBatchNo = (it) => {
+    const numbers = (it.allocations || [])
+        .map((a) => a.batch_number)
+        .filter(Boolean);
+    if (numbers.length) return numbers.join(" + ");
+    return it.batch_no || it.product?.batch_no || "N/A";
+};
 
 /**
  * Generates (or returns the existing) invoice for [orderId].
@@ -94,14 +106,25 @@ export const generateInvoiceForOrder = async (orderId) => {
                 mrp: it.product?.mrp,
                 gstPercent: it.product?.gstPercent,
                 disPercent: it.product?.discountPercent || "N/A",
+                // Merged into the single "MFG/Mkt By" column by the template.
                 manufacturer: it.product?.manufacturer || "N/A",
                 marketedBy: it.product?.marketedBy || "N/A",
-                // Prefer the batch SNAPSHOTTED on the order line (the batch that
-                // was actually sold); fall back to the product only for orders
-                // placed before snapshotting existed, then to "N/A".
-                batch_no: it.batch_no || it.product?.batch_no || "N/A",
-                exp_date: it.exp_date || it.product?.exp_date || "N/A",
+                // The exact lot(s) this line consumed, read off the FEFO
+                // allocation snapshotted at order creation. A line that drew
+                // from several lots prints them all ("B1 + B2"), so the document
+                // always states precisely which stock was handed over. Falls
+                // back to the line's single-batch snapshot, then the product,
+                // for orders placed before each of those existed.
+                batch_no: allocatedBatchNo(it),
+                exp_date: it.allocations?.[0]?.expiry_date
+                    || it.exp_date
+                    || it.product?.exp_date
+                    || "N/A",
                 quantity: it.quantity,
+                // FREE GOODS column — read straight off the order line, so the
+                // invoice always shows what the database holds. Orders placed
+                // before the field existed have no value and print 0.
+                freeQty: normalizeFreeQty(it.freeQty),
                 price: it.orderPrice ?? it.product?.price,
                 amount: lineAmount(it),
             })),

@@ -11,10 +11,12 @@ import Invoice from "../model/invoiceModel.js";
 import outletStock from "../model/outletStockModel.js";
 import { generatePDF } from "../utils/generatePdf.js";
 import cloudinary from "../utils/cloudinary.js";
+import { normalizeFreeQty } from "../utils/freeGoods.js";
 import {
     withInventoryTxn,
     allocateFEFO,
     releaseStock,
+    releaseOutletStock,
     InsufficientStockError,
 } from "../utils/inventory.js";
 
@@ -91,6 +93,9 @@ export const placeOrder = async (req, res) => {
                         product: item.product._id,
                         quantity: item.quantity,
                         orderPrice: item.product.price,
+                        // Free goods recorded on the cart line (staff-set) —
+                        // invoice-only, totalAmount above bills `quantity` only.
+                        freeQty: normalizeFreeQty(item.freeQty),
                         batch_no: allocations[0]?.batch_number ?? item.product.batch_no,
                         exp_date: allocations[0]?.expiry_date ?? item.product.exp_date,
                         allocations,
@@ -210,11 +215,14 @@ export const placeOrder = async (req, res) => {
                     mrp: item.product.mrp,
                     gstPercent: item.product.gstPercent,
                     disPercent: item.product.discountPercent || "N/A",
+                    // Merged into the single "MFG/Mkt By" column by the template.
                     manufacturer: item.product.manufacturer || "N/A",
                     marketedBy: item.product.marketedBy || "N/A",
                     batch_no: item.product.batch_no || "N/A",
                     exp_date: item.product.exp_date || "N/A",
                     quantity: item.quantity,
+                    // FREE GOODS column — free units on this line, never priced.
+                    freeQty: normalizeFreeQty(item.freeQty),
                     price: item.product.price,
                     amount: item.product.price * item.quantity
                 })),
@@ -489,15 +497,29 @@ export const cancelOrder = async (req, res) => {
         // product.stock for it would inflate the catalog and leave the outlet
         // short.
         if (existingOrder.outlet) {
-            for (const item of existingOrder.orderItems) {
-                await outletStock.updateOne(
-                    {
-                        outlet: existingOrder.outlet,
-                        product: item.product._id
-                    },
-                    { $inc: { quantity: item.quantity } }
-                );
-            }
+            // Outlet order: return the units to the outlet's OWN batches (via the
+            // line's allocations snapshot), which also re-syncs outletStock.quantity.
+            // Pre-batch outlet orders have no allocations → releaseOutletStock
+            // falls back to the batch_no snapshot / a legacy row.
+            await withInventoryTxn(async (session) => {
+                for (const item of existingOrder.orderItems) {
+                    const productId = item.product?._id || item.product;
+                    const entries =
+                        item.allocations && item.allocations.length
+                            ? item.allocations
+                            : {
+                                  batch_no: item.batch_no,
+                                  exp_date: item.exp_date,
+                                  quantity: item.quantity,
+                              };
+                    await releaseOutletStock(
+                        existingOrder.outlet,
+                        productId,
+                        entries,
+                        session
+                    );
+                }
+            });
         } else {
             // Catalog order: return the units to the exact batches they came
             // from (via the line's allocations snapshot), atomically. Orders

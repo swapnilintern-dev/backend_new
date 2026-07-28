@@ -35,6 +35,18 @@ const orderSchema = new mongoose.Schema({
                 required: true
             },
 
+            // FREE GOODS — units handed over on this line at no charge, printed
+            // in the invoice's FREE GOODS column. Snapshotted at order creation
+            // so a later change never rewrites a historical invoice. It is NEVER
+            // priced: orderPrice, totalAmount, the GST slabs and the totals are
+            // all computed from `quantity` alone. Defaults to 0, so every order
+            // placed before this field existed still reads (and prints) 0.
+            freeQty: {
+                type: Number,
+                default: 0,
+                min: 0
+            },
+
             // Batch + expiry SNAPSHOTTED at order creation from the product that
             // was actually sold. The invoice reads these first (falling back to
             // the product only for pre-snapshot orders) so a later batch edit on
@@ -57,6 +69,18 @@ const orderSchema = new mongoose.Schema({
             // falls back to the batch_no snapshot for those.
             allocations: [
                 {
+                    // WHICH COLLECTION this id belongs to depends on where the
+                    // stock came from: a catalog sale (vendor / marketing
+                    // manual order) stores a `productBatch` id, an outlet sale
+                    // (POS bill / outlet manual order) stores an
+                    // `outletStockBatch` id — those are the outlet's own lots,
+                    // which left the catalog at assignment time. The `ref`
+                    // below is therefore only correct for the catalog case, so
+                    // this field must NOT be populated. Nothing populates it:
+                    // batch_number + expiry_date below carry everything the
+                    // invoice and the cancel/restore path need, and each of
+                    // those paths already knows which bucket it is releasing to
+                    // (releaseStock vs releaseOutletStock).
                     batch: {
                         type: mongoose.Schema.Types.ObjectId,
                         ref: "productBatch"

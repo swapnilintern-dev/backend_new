@@ -1,5 +1,6 @@
 import Outlet from "../model/outletregistersModel.js";
 import outletStock from "../model/outletStockModel.js";
+import OutletStockBatch from "../model/outletStockBatchModel.js";
 import product from "../model/productModel.js";
 import jwt from "jsonwebtoken"
 import converter from "number-to-words"
@@ -10,11 +11,35 @@ import cloudinary from "../utils/cloudinary.js";
 import order from "../model/orderModel.js";
 import Invoice from "../model/invoiceModel.js";
 import nodemailer from "nodemailer";
+import { normalizeFreeQty } from "../utils/freeGoods.js";
 import {
     withInventoryTxn,
     allocateFEFO,
+    creditOutletBatches,
+    getSellableOutletBatches,
+    previewOutletAllocation,
+    allocateOutletFEFO,
+    normalizeAllocations,
     InsufficientStockError,
 } from "../utils/inventory.js";
+
+/// Renders an order line's FEFO allocation for the invoice's Batch / Expiry
+/// columns. A line that drew from several lots prints them all ("B1 + B2"), so
+/// the document always states exactly which stock was handed over. Falls back
+/// to the product's mirror fields when a line has no allocation (legacy orders).
+const invoiceBatchNo = (allocations, product) => {
+    const list = Array.isArray(allocations) ? allocations : [];
+    const numbers = list.map((a) => a.batch_number).filter(Boolean);
+    if (numbers.length) return numbers.join(" + ");
+    return product?.batch_no || "N/A";
+};
+
+/// The expiry printed beside the batch: the FEFO-front (earliest) lot's, which
+/// is the soonest-expiring stock on that line.
+const invoiceExpDate = (allocations, product) => {
+    const list = Array.isArray(allocations) ? allocations : [];
+    return list[0]?.expiry_date || product?.exp_date || "N/A";
+};
 
 
 const outletRegister = async (req, res) => {
@@ -165,7 +190,11 @@ export const outlet_login = async (req, res) => {
 
 export const addOutletStock = async (req, res) => {
     try {
-        const { productId, outletId, quantity } = req.body;
+        // `allocations` (optional) is the batch breakdown Marketing explicitly
+        // chose in the Stock Assignment screen: [{ batch, batch_number,
+        // quantity }]. Omitted → pure FEFO, exactly as this endpoint has always
+        // behaved, so every existing caller is unaffected.
+        const { productId, outletId, quantity, allocations } = req.body;
 
         if (!productId || !outletId || !quantity) {
             return res.status(400).json({
@@ -213,20 +242,33 @@ export const addOutletStock = async (req, res) => {
         let resultStock;
         try {
             resultStock = await withInventoryTxn(async (session) => {
-                await allocateFEFO(productId, qty, session);
+                // Consume the catalog batches FEFO, and record the SAME batch
+                // identities (number + expiry) as outlet batches so the outlet
+                // knows exactly which lots it now holds (used later by POS
+                // billing). recalcOutletStock keeps outletStock.quantity as the
+                // synced total, so nothing below the mirror changes for readers.
+                //
+                // The explicitly chosen batches (when sent) are validated and
+                // honoured; anything left over is filled FEFO. The SAME engine
+                // enforces per-batch availability, so a stale pick can never
+                // assign more than a lot holds.
+                const allocated = await allocateFEFO(
+                    productId,
+                    qty,
+                    session,
+                    normalizeAllocations(allocations)
+                );
+                await creditOutletBatches(outletId, productId, allocated, session, {
+                    purchase_price: Product.mrp || Product.price || 0,
+                    selling_price: Product.price || 0,
+                });
 
-                if (existingStock) {
-                    existingStock.quantity += qty;
-                    await existingStock.save({ session });
-                    return existingStock;
-                }
-
-                const created = await outletStock.create([{
-                    product: productId,
-                    outlet: outletId,
-                    quantity: qty
-                }], { session });
-                return created[0];
+                // outletStock.quantity is now maintained by recalcOutletStock
+                // (upsert) — just return the current row for the response.
+                const row = await outletStock.findOne(
+                    { outlet: outletId, product: productId }
+                ).session(session);
+                return { row, allocated };
             });
         } catch (err) {
             if (err instanceof InsufficientStockError) {
@@ -238,7 +280,14 @@ export const addOutletStock = async (req, res) => {
         return res.status(existingStock ? 200 : 201).json({
             success: true,
             message: existingStock ? "Stock updated successfully" : "Stock added successfully",
-            stock: resultStock
+            stock: resultStock.row,
+            // Audit trail: exactly which lots left the catalog for this outlet.
+            allocations: resultStock.allocated.map((a) => ({
+                batch: a.batch,
+                batch_number: a.batch_number,
+                expiry_date: a.expiry_date,
+                quantity: a.quantity
+            }))
         });
 
     }
@@ -263,10 +312,50 @@ export const getOutletProducts = async (req, res) => {
 
         console.log("stock is :", outletId);
 
+        // Attach the batch position of the OUTLET's own stock. The populated
+        // product carries the CATALOG's mirror (batch_no/exp_date = the
+        // catalog's FEFO-front lot), which is not necessarily the lot this
+        // outlet holds — it may have been assigned an earlier or later batch.
+        // These additive fields state what the outlet will actually sell next.
+        //
+        // Additive only: every existing field is returned untouched, so a
+        // client that ignores `batch` keeps working exactly as before.
+        const batchRows = await OutletStockBatch.find({
+            outlet: outletId,
+            available_quantity: { $gt: 0 },
+        }).sort({ expiry_date: 1, createdAt: 1 });
+
+        // First row per product = that product's FEFO-front lot (the sort above
+        // puts the nearest expiry first).
+        const frontByProduct = new Map();
+        const countByProduct = new Map();
+        for (const b of batchRows) {
+            const key = String(b.product);
+            if (!frontByProduct.has(key)) frontByProduct.set(key, b);
+            countByProduct.set(key, (countByProduct.get(key) || 0) + 1);
+        }
+
+        const products = stocks.map((s) => {
+            const plain = s.toObject();
+            const key = String(plain.product?._id || plain.product);
+            const front = frontByProduct.get(key);
+            plain.batch = front
+                ? {
+                    _id: front._id,
+                    batch_number: front.batch_number,
+                    expiry_date: front.expiry_date,
+                    available_quantity: front.available_quantity,
+                    isExpiringSoon: front.isExpiringSoon,
+                }
+                : null;
+            plain.batch_count = countByProduct.get(key) || 0;
+            return plain;
+        });
+
         return res.status(200).json({
             success: true,
-            count: stocks.length,
-            products: stocks
+            count: products.length,
+            products
         });
 
     } catch (error) {
@@ -287,7 +376,10 @@ export const addToCart = async (req, res) => {
 
         console.log("outlet id :", outletId ) ;
 
-        const { productId, quantity } = req.body;
+        // freeQty is optional free goods for this line, and allocations the
+        // batches the user pinned for it; both omitted → the line's current
+        // values stay as they are, so existing callers are unaffected.
+        const { productId, quantity, freeQty, allocations } = req.body;
 
         const outlet = await Outlet.findById(outletId);
 
@@ -315,11 +407,23 @@ export const addToCart = async (req, res) => {
 
             existingItem.quantity += Number(quantity);
 
+            if (freeQty !== undefined) {
+                existingItem.freeQty = normalizeFreeQty(freeQty);
+            }
+
+            // The pinned batches describe the WHOLE line, so a later call
+            // replaces them rather than appending.
+            if (allocations !== undefined) {
+                existingItem.allocations = normalizeAllocations(allocations);
+            }
+
         } else {
 
             outlet.cart.push({
                 product: productId,
-                quantity
+                quantity,
+                freeQty: normalizeFreeQty(freeQty),
+                allocations: normalizeAllocations(allocations)
             });
 
         }
@@ -427,64 +531,13 @@ export const outletManualOrder = async (req, res) => {
             (qty, item) => qty + item.quantity, 0
         );
 
-        // 1. Stock Check
-        for (const item of outlet.cart) {
-
-            const stock = await outletStock.findOne({
-                outlet: outletId,
-                product: item.product._id
-            });
-
-            if (!stock) {
-                return res.status(404).json({
-                    success: false,
-                    message: `${item.product.title} stock not found`
-                });
-            }
-            
-
-            if (stock.quantity < item.quantity) {
-                return res.status(400).json({
-                    success: false,
-                    message: `${item.product.title} has only ${stock.quantity} stock available`
-                });
-            }
-        }
-
-        // 2. Order Items Prepare
+        // 1. Totals (prices are GST-inclusive; free goods are never billed).
         let totalAmount = 0;
-
-        const orderItems = outlet.cart.map((item) => {
+        for (const item of outlet.cart) {
             totalAmount += item.product.price * item.quantity;
-
-            return {
-                product: item.product._id,
-                quantity: item.quantity,
-                orderPrice: item.product.price,
-                // Snapshot the sold batch so the invoice never re-reads a later one.
-                batch_no: item.product.batch_no,
-                exp_date: item.product.exp_date
-            };
-        });
+        }
 
         const amountWord = converter.toWords(totalAmount);
-
-
-        // 3. Reduce Outlet Stock
-        for (const item of outlet.cart) {
-
-            await outletStock.updateOne(
-                {
-                    outlet: outletId,
-                    product: item.product._id
-                },
-                {
-                    $inc: {
-                        quantity: -item.quantity
-                    }
-                }
-            );
-        }
 
         // Order Number
         const orderNo =
@@ -493,38 +546,93 @@ export const outletManualOrder = async (req, res) => {
             "-" +
             Math.floor(Math.random() * 1000);
 
-        // 4. Create Order
-        const createOrder = await order.create({
-
-            outlet: outletId,
-
-            orderItems,
-
-            shippingAddress: {
-                address: outlet.address,
-                city: outlet.city,
-                state: outlet.state,
-                pincode: outlet.pincode,
-                country: "India",
-                phoneNo: outlet.mobileNo
-            },
-
-            totalAmount,
-
-            amountWord: `${amountWord} Rupees Only`,
-            // amountWord: toWords(totalAmount) + " rupees only",
-
-            paymentMethod: "COD",
-
-            orderStatus: "Pending",
-
-            orderType: "Outlet",
-
-            orderNo
-        });
-
-        // 5. Clear Cart
+        // 2. Deduct + create, batch-wise and atomically.
+        //
+        // This used to check outletStock.quantity and $inc it down directly.
+        // It now allocates FEFO across the OUTLET's batches (outletStockBatch),
+        // honouring any batches the user pinned on the cart line, and records
+        // the exact lots on the order. outletStock.quantity is still the number
+        // every existing reader sees — the engine keeps it as the auto-synced
+        // total — so nothing downstream changes except that the deduction is
+        // now traceable to a batch, transactional and oversell-proof.
         const cartSnapshot = [...outlet.cart];
+
+        // The lots each line actually consumed, keyed by product id — read by
+        // the invoice below so it prints the batch that was handed over rather
+        // than the product's mirror. Kept beside the cart (not on it) because
+        // the cart entries are mongoose subdocuments.
+        const allocatedByProduct = new Map();
+
+        let createOrder;
+        try {
+            createOrder = await withInventoryTxn(async (session) => {
+                const orderItems = [];
+                // A retry after a transient transaction abort re-runs this
+                // callback, so clear anything the previous attempt recorded.
+                allocatedByProduct.clear();
+
+                for (const item of outlet.cart) {
+                    const allocations = await allocateOutletFEFO(
+                        outletId,
+                        item.product._id,
+                        item.quantity,
+                        normalizeAllocations(item.allocations),
+                        session
+                    );
+                    allocatedByProduct.set(String(item.product._id), allocations);
+
+                    orderItems.push({
+                        product: item.product._id,
+                        quantity: item.quantity,
+                        orderPrice: item.product.price,
+                        // Free goods carried from the cart line — invoice-only,
+                        // the totalAmount above bills `quantity` alone.
+                        freeQty: normalizeFreeQty(item.freeQty),
+                        // Snapshot the sold batch so the invoice never re-reads
+                        // a later one; allocations[0] is the FEFO-front lot.
+                        batch_no: allocations[0]?.batch_number ?? item.product.batch_no,
+                        exp_date: allocations[0]?.expiry_date ?? item.product.exp_date,
+                        allocations,
+                    });
+                }
+
+                const created = await order.create([{
+                    outlet: outletId,
+
+                    orderItems,
+
+                    shippingAddress: {
+                        address: outlet.address,
+                        city: outlet.city,
+                        state: outlet.state,
+                        pincode: outlet.pincode,
+                        country: "India",
+                        phoneNo: outlet.mobileNo
+                    },
+
+                    totalAmount,
+
+                    amountWord: `${amountWord} Rupees Only`,
+
+                    paymentMethod: "COD",
+
+                    orderStatus: "Pending",
+
+                    orderType: "Outlet",
+
+                    orderNo
+                }], { session });
+
+                return created[0];
+            });
+        } catch (err) {
+            if (err instanceof InsufficientStockError) {
+                return res.status(400).json({ success: false, message: err.message });
+            }
+            throw err;
+        }
+
+        // 3. Clear Cart
         outlet.cart = [];
         await outlet.save();
 
@@ -582,11 +690,21 @@ export const outletManualOrder = async (req, res) => {
                     mrp: item.product.mrp,
                     gstPercent: item.product.gstPercent,
                     disPercent: item.product.discountPercent || "N/A",
+                    // Merged into the single "MFG/Mkt By" column by the template.
                     manufacturer: item.product.manufacturer || "N/A",
                     marketedBy: item.product.marketedBy || "N/A",
-                    batch_no: item.product.batch_no || "N/A",
-                    exp_date: item.product.exp_date || "N/A",
+                    // The exact lot(s) this line consumed — see invoiceBatchNo.
+                    batch_no: invoiceBatchNo(
+                        allocatedByProduct.get(String(item.product._id)),
+                        item.product
+                    ),
+                    exp_date: invoiceExpDate(
+                        allocatedByProduct.get(String(item.product._id)),
+                        item.product
+                    ),
                     quantity: item.quantity,
+                    // FREE GOODS column — free units on this line, never priced.
+                    freeQty: normalizeFreeQty(item.freeQty),
                     price: item.product.price,
                     amount: item.product.price * item.quantity
                 })),
@@ -699,13 +817,74 @@ export const clearOutletCart = async (req, res) => {
 
 
 // -----------------------------------------------------------------------------
+// FEFO batch allocation for POS billing (read-only helpers).
+//   GET  /vsArogya/outlet/product/:productId/available-batches
+//   POST /vsArogya/outlet/allocate-preview  { productId, quantity, overrides? }
+// The backend is the single source of truth: the app calls these to show the
+// batch breakdown and validate manual overrides BEFORE the final bill.
+// -----------------------------------------------------------------------------
+
+/// The outlet's sellable batches (available > 0, not expired, FEFO order) for a
+/// product — powers the manual-override picker.
+export const getOutletAvailableBatches = async (req, res) => {
+    try {
+        const outletId = req.id;
+        const { productId } = req.params;
+        const batches = await getSellableOutletBatches(outletId, productId);
+        return res.status(200).json({
+            success: true,
+            batches: batches.map((b) => ({
+                _id: b._id,
+                batch_number: b.batch_number,
+                expiry_date: b.expiry_date,
+                available_quantity: b.available_quantity,
+                created_at: b.createdAt,
+                isExpiringSoon: b.isExpiringSoon,
+            })),
+        });
+    } catch (error) {
+        console.log("getOutletAvailableBatches error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/// Non-mutating FEFO allocation for a requested quantity (respecting any manual
+/// overrides). Returns the batch breakdown + remaining + the available batches.
+export const outletAllocatePreview = async (req, res) => {
+    try {
+        const outletId = req.id;
+        const { productId, quantity, overrides } = req.body;
+        if (!productId) {
+            return res.status(400).json({ success: false, message: "productId is required" });
+        }
+        const { allocations, remaining, availableBatches } =
+            await previewOutletAllocation(outletId, productId, quantity, overrides);
+        return res.status(200).json({
+            success: true,
+            allocations,
+            remaining,
+            availableBatches,
+        });
+    } catch (error) {
+        if (error instanceof InsufficientStockError) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        console.log("outletAllocatePreview error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+// -----------------------------------------------------------------------------
 // POS BILLING — creates a walk-in counter bill directly from inline line items +
 // the customer's details, WITHOUT needing a pre-registered vendor. This lets the
 // app place the bill (and generate the invoice) instantly while the customer's
 // vendor registration is submitted separately in the background. It deducts
-// outlet stock and renders the invoice from the same HTML template.
+// outlet stock (FEFO across the outlet's batches) and renders the invoice from
+// the same HTML template.
 // Additive: does not touch outletManualOrder or any existing behaviour.
-//   POST /vsArogya/outlet/bill   body: { customer, items: [{ productId, quantity }] }
+//   POST /vsArogya/outlet/bill   body: { customer, items: [{ productId, quantity, freeQty?, allocations? }] }
+// `freeQty` is the free goods handed over on that line — printed in the
+// invoice's FREE GOODS column, never billed. Optional: omitted → 0.
 // -----------------------------------------------------------------------------
 export const outletBillingOrder = async (req, res) => {
     try {
@@ -727,11 +906,10 @@ export const outletBillingOrder = async (req, res) => {
             });
         }
 
-        // 1. Resolve every line, checking outlet stock, before touching anything.
+        // 1. Resolve every line + its product/price up front (no mutation yet).
         let totalAmount = 0;
         let total_qty = 0;
-        const orderItems = [];
-        const lineSnapshots = []; // { product doc, quantity } for the invoice
+        const lineSnapshots = []; // { product doc, quantity, freeQty, allocations? } for the invoice
 
         for (const it of items) {
             const qty = Number(it.quantity);
@@ -742,6 +920,17 @@ export const outletBillingOrder = async (req, res) => {
                 });
             }
 
+            // Free goods are counted separately from the billed quantity: they
+            // add nothing to totalAmount, total_qty or the GST slabs below.
+            if (it.freeQty !== undefined &&
+                (!Number.isFinite(Number(it.freeQty)) || Number(it.freeQty) < 0)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid free goods quantity in the bill"
+                });
+            }
+            const freeQty = normalizeFreeQty(it.freeQty);
+
             const p = await product.findById(it.productId);
             if (!p) {
                 return res.status(404).json({
@@ -750,32 +939,12 @@ export const outletBillingOrder = async (req, res) => {
                 });
             }
 
-            const stock = await outletStock.findOne({
-                outlet: outletId,
-                product: it.productId
-            });
-            if (!stock || stock.quantity < qty) {
-                return res.status(400).json({
-                    success: false,
-                    message: `${p.title} has only ${stock ? stock.quantity : 0} in stock`
-                });
-            }
-
-            orderItems.push({ product: p._id, quantity: qty, orderPrice: p.price, batch_no: p.batch_no, exp_date: p.exp_date });
-            lineSnapshots.push({ product: p, quantity: qty });
+            lineSnapshots.push({ product: p, quantity: qty, freeQty, overrides: it.allocations });
             totalAmount += p.price * qty;
             total_qty += qty;
         }
 
         const amountWord = converter.toWords(totalAmount);
-
-        // 2. Deduct outlet stock (guarded above so it never goes negative).
-        for (const it of items) {
-            await outletStock.updateOne(
-                { outlet: outletId, product: it.productId },
-                { $inc: { quantity: -Number(it.quantity) } }
-            );
-        }
 
         const orderNo =
             "ORD-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
@@ -792,18 +961,54 @@ export const outletBillingOrder = async (req, res) => {
             phoneNo: c.phone || outlet.mobileNo
         };
 
-        // 3. Create the order.
-        const createOrder = await order.create({
-            outlet: outletId,
-            orderItems,
-            shippingAddress,
-            totalAmount,
-            amountWord: `${amountWord} Rupees Only`,
-            paymentMethod: "COD",
-            orderStatus: "Pending",
-            orderType: "Outlet",
-            orderNo
-        });
+        // 2. Allocate FEFO across the outlet's batches (honouring any manual
+        //    overrides) and create the order — ALL in one transaction. A short
+        //    or invalid line rolls the whole bill back, so inventory is never
+        //    left partially deducted.
+        let createOrder;
+        try {
+            createOrder = await withInventoryTxn(async (session) => {
+                const orderItems = [];
+                for (const ln of lineSnapshots) {
+                    const allocations = await allocateOutletFEFO(
+                        outletId,
+                        ln.product._id,
+                        ln.quantity,
+                        ln.overrides,
+                        session
+                    );
+                    ln.allocations = allocations; // for the invoice below
+                    orderItems.push({
+                        product: ln.product._id,
+                        quantity: ln.quantity,
+                        orderPrice: ln.product.price,
+                        freeQty: ln.freeQty,
+                        batch_no: allocations[0]?.batch_number ?? ln.product.batch_no,
+                        exp_date: allocations[0]?.expiry_date ?? ln.product.exp_date,
+                        allocations,
+                    });
+                }
+
+                const created = await order.create([{
+                    outlet: outletId,
+                    orderItems,
+                    shippingAddress,
+                    totalAmount,
+                    amountWord: `${amountWord} Rupees Only`,
+                    paymentMethod: "COD",
+                    orderStatus: "Pending",
+                    orderType: "Outlet",
+                    orderNo
+                }], { session });
+
+                return created[0];
+            });
+        } catch (err) {
+            if (err instanceof InsufficientStockError) {
+                return res.status(400).json({ success: false, message: err.message });
+            }
+            throw err;
+        }
 
         // Respond immediately — the invoice renders below without blocking.
         res.status(201).json({
@@ -858,11 +1063,15 @@ export const outletBillingOrder = async (req, res) => {
                     mrp: item.product.mrp,
                     gstPercent: item.product.gstPercent,
                     disPercent: item.product.discountPercent || "N/A",
+                    // Merged into the single "MFG/Mkt By" column by the template.
                     manufacturer: item.product.manufacturer || "N/A",
                     marketedBy: item.product.marketedBy || "N/A",
-                    batch_no: item.product.batch_no || "N/A",
-                    exp_date: item.product.exp_date || "N/A",
+                    // The exact lot(s) this line consumed — see invoiceBatchNo.
+                    batch_no: invoiceBatchNo(item.allocations, item.product),
+                    exp_date: invoiceExpDate(item.allocations, item.product),
                     quantity: item.quantity,
+                    // FREE GOODS column — free units on this line, never priced.
+                    freeQty: item.freeQty,
                     price: item.product.price,
                     amount: item.product.price * item.quantity
                 })),
