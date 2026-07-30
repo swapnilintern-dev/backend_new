@@ -826,10 +826,70 @@ export const clearOutletCart = async (req, res) => {
 
 /// The outlet's sellable batches (available > 0, not expired, FEFO order) for a
 /// product — powers the manual-override picker.
+///
+/// `?all=1` (opt-in, additive) widens the SAME endpoint from "what can be sold
+/// right now" to "every lot this outlet holds of this medicine" — expired and
+/// emptied lots included — and attaches the catalog product plus the outlet's
+/// totals, so the Stock → Medicine Details screen needs exactly ONE request.
+/// Callers that omit the flag (the billing batch picker, allocate-preview) get
+/// the byte-identical response they have always had.
 export const getOutletAvailableBatches = async (req, res) => {
     try {
         const outletId = req.id;
         const { productId } = req.params;
+
+        const wantsAll = ["1", "true", "yes", "all"].includes(
+            String(req.query.all ?? "").toLowerCase()
+        );
+
+        if (wantsAll) {
+            const [productDoc, rows, stockRow] = await Promise.all([
+                product.findById(productId),
+                // Same FEFO order the sellable read uses — nearest expiry first,
+                // then oldest lot — so both views agree on what comes next.
+                // manufacturing_date is never copied onto an outlet lot, so it
+                // is read through the source_batch audit link to the catalog lot.
+                OutletStockBatch.find({ outlet: outletId, product: productId })
+                    .populate("source_batch", "manufacturing_date")
+                    .sort({ expiry_date: 1, createdAt: 1 }),
+                outletStock.findOne({ outlet: outletId, product: productId }),
+            ]);
+
+            if (!productDoc) {
+                return res
+                    .status(404)
+                    .json({ success: false, message: "Product not found" });
+            }
+
+            const batches = rows.map((b) => ({
+                _id: b._id,
+                batch_number: b.batch_number,
+                expiry_date: b.expiry_date,
+                manufacturing_date: b.source_batch?.manufacturing_date ?? null,
+                available_quantity: b.available_quantity,
+                purchase_price: b.purchase_price,
+                selling_price: b.selling_price,
+                supplier: b.supplier,
+                isExpiringSoon: b.isExpiringSoon,
+                created_at: b.createdAt,
+                updated_at: b.updatedAt,
+            }));
+
+            return res.status(200).json({
+                success: true,
+                product: productDoc,
+                // `stock` stays the mirror every existing outlet reader uses;
+                // `total_stock` is the live SUM of the lots listed below.
+                stock: stockRow?.quantity ?? 0,
+                total_stock: batches.reduce(
+                    (sum, b) => sum + (Number(b.available_quantity) || 0),
+                    0
+                ),
+                batch_count: batches.length,
+                batches,
+            });
+        }
+
         const batches = await getSellableOutletBatches(outletId, productId);
         return res.status(200).json({
             success: true,
