@@ -12,6 +12,7 @@ import order from "../model/orderModel.js";
 import Invoice from "../model/invoiceModel.js";
 import nodemailer from "nodemailer";
 import { normalizeFreeQty } from "../utils/freeGoods.js";
+import { buildInvoiceItems, invoiceRow } from "../utils/invoiceItems.js";
 import {
     withInventoryTxn,
     allocateFEFO,
@@ -24,9 +25,10 @@ import {
 } from "../utils/inventory.js";
 
 /// Renders an order line's FEFO allocation for the invoice's Batch / Expiry
-/// columns. A line that drew from several lots prints them all ("B1 + B2"), so
-/// the document always states exactly which stock was handed over. Falls back
-/// to the product's mirror fields when a line has no allocation (legacy orders).
+/// columns BEFORE the line is split into one row per lot (see
+/// utils/invoiceItems.js). In practice these supply single-lot lines and the
+/// fallback for legacy orders with no allocation snapshot; multi-lot lines take
+/// their batch and expiry from the split instead.
 const invoiceBatchNo = (allocations, product) => {
     const list = Array.isArray(allocations) ? allocations : [];
     const numbers = list.map((a) => a.batch_number).filter(Boolean);
@@ -684,30 +686,28 @@ export const outletManualOrder = async (req, res) => {
                     month: "long",
                     year: "numeric"
                 }),
-                items: cartSnapshot.map(item => ({
-                    title: item.product.title,
-                    hsnCode: item.product.hsnCode || "N/A",
-                    mrp: item.product.mrp,
-                    gstPercent: item.product.gstPercent,
-                    disPercent: item.product.discountPercent || "N/A",
-                    // Merged into the single "MFG/Mkt By" column by the template.
-                    manufacturer: item.product.manufacturer || "N/A",
-                    marketedBy: item.product.marketedBy || "N/A",
-                    // The exact lot(s) this line consumed — see invoiceBatchNo.
-                    batch_no: invoiceBatchNo(
-                        allocatedByProduct.get(String(item.product._id)),
-                        item.product
-                    ),
-                    exp_date: invoiceExpDate(
-                        allocatedByProduct.get(String(item.product._id)),
-                        item.product
-                    ),
-                    quantity: item.quantity,
-                    // FREE GOODS column — free units on this line, never priced.
-                    freeQty: normalizeFreeQty(item.freeQty),
-                    price: item.product.price,
-                    amount: item.product.price * item.quantity
-                })),
+                // One row PER BATCH the line consumed — total_item below stays
+                // the LINE count, unchanged.
+                items: buildInvoiceItems(
+                    cartSnapshot,
+                    item => invoiceRow(item.product, {
+                        quantity: item.quantity,
+                        // FREE GOODS — free units on this line, never priced.
+                        freeQty: normalizeFreeQty(item.freeQty),
+                        price: item.product.price,
+                        amount: item.product.price * item.quantity,
+                        // The lot(s) this line consumed — see invoiceBatchNo.
+                        batch_no: invoiceBatchNo(
+                            allocatedByProduct.get(String(item.product._id)),
+                            item.product
+                        ),
+                        exp_date: invoiceExpDate(
+                            allocatedByProduct.get(String(item.product._id)),
+                            item.product
+                        ),
+                    }),
+                    item => allocatedByProduct.get(String(item.product._id))
+                ),
                 total_item: cartSnapshot.length,
                 total_qty,
                 gross_total: totalAmount,
@@ -1117,24 +1117,22 @@ export const outletBillingOrder = async (req, res) => {
                     month: "long",
                     year: "numeric"
                 }),
-                items: lineSnapshots.map(item => ({
-                    title: item.product.title,
-                    hsnCode: item.product.hsnCode || "N/A",
-                    mrp: item.product.mrp,
-                    gstPercent: item.product.gstPercent,
-                    disPercent: item.product.discountPercent || "N/A",
-                    // Merged into the single "MFG/Mkt By" column by the template.
-                    manufacturer: item.product.manufacturer || "N/A",
-                    marketedBy: item.product.marketedBy || "N/A",
-                    // The exact lot(s) this line consumed — see invoiceBatchNo.
-                    batch_no: invoiceBatchNo(item.allocations, item.product),
-                    exp_date: invoiceExpDate(item.allocations, item.product),
-                    quantity: item.quantity,
-                    // FREE GOODS column — free units on this line, never priced.
-                    freeQty: item.freeQty,
-                    price: item.product.price,
-                    amount: item.product.price * item.quantity
-                })),
+                // One row PER BATCH the line consumed — total_item below stays
+                // the LINE count, unchanged.
+                items: buildInvoiceItems(
+                    lineSnapshots,
+                    item => invoiceRow(item.product, {
+                        quantity: item.quantity,
+                        // FREE GOODS — free units on this line, never priced.
+                        freeQty: item.freeQty,
+                        price: item.product.price,
+                        amount: item.product.price * item.quantity,
+                        // The lot(s) this line consumed — see invoiceBatchNo.
+                        batch_no: invoiceBatchNo(item.allocations, item.product),
+                        exp_date: invoiceExpDate(item.allocations, item.product),
+                    }),
+                    item => item.allocations
+                ),
                 total_item: lineSnapshots.length,
                 total_qty,
                 gross_total: totalAmount,

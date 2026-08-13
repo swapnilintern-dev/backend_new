@@ -2,6 +2,42 @@ import jwt from "jsonwebtoken";
 import product from "../model/productModel.js";
 import registerVendor from "../model/userModel.js";
 
+// ---------------------------------------------------------------------------
+// Cart stock ceiling.
+//
+// The cart used to increment with no reference to stock at all, so a vendor
+// could sit 13 units of a 10-unit medicine in their cart. Placing that order
+// was always refused (placeOrder allocates FEFO and throws
+// InsufficientStockError), but only at the very end — after the vendor had
+// filled the cart, and with the bad quantity still saved on their account to
+// greet them at the next login.
+//
+// product.stock is the mirror the inventory engine keeps in sync with the sum
+// of the product's batches, so it is the right figure to test against here.
+// ---------------------------------------------------------------------------
+
+/// True when `quantity` would take the line past what is in stock.
+/// A product with no stock figure recorded is treated as UNLIMITED, matching
+/// how the app reads a missing stock field — this endpoint must not start
+/// refusing medicines that were previously sellable.
+const exceedsStock = (get_product, quantity) => {
+    const stock = Number(get_product?.stock);
+    if (!Number.isFinite(stock)) return false;
+    return quantity > stock;
+};
+
+/// The 400 the cart endpoints answer with when the ceiling is hit. Wording
+/// matches the "Insufficient stock" family already used across the controllers.
+const stockRejection = (res, get_product) =>
+    res.status(400).json({
+        message:
+            Number(get_product?.stock) > 0
+                ? `Only ${get_product.stock} left in stock`
+                : `${get_product?.title || "This product"} is out of stock`,
+        success: false,
+        stock: Number(get_product?.stock) || 0,
+    });
+
 // const cart = async (req, res) => {
 //   try {
 //     const token = req.cookies.token;
@@ -70,9 +106,18 @@ export const addCart = async (req, res) => {
 
     if (itemIndex > -1) {
 
+      // Refuse rather than silently clamp: the app tracks its own quantity and
+      // would drift out of step with a number it never asked for.
+      if (exceedsStock(get_product, user.cart[itemIndex].quantity + 1)) {
+        return stockRejection(res, get_product);
+      }
       user.cart[itemIndex].quantity += 1;
     }
     else {
+
+      if (exceedsStock(get_product, 1)) {
+        return stockRejection(res, get_product);
+      }
 
       user.cart.push({
 
@@ -215,13 +260,19 @@ export const increaseItem = async(req , res ) =>{
     }
 
 
+    // Same ceiling as add-cart — this is the other way a line grows.
+    const get_product = await product.findById(product_id);
+    if (exceedsStock(get_product, user.cart[itemidx].quantity + 1)) {
+      return stockRejection(res, get_product);
+    }
+
     user.cart[itemidx].quantity += 1 ;
     await user.save() ;
 
     return res.status(201)
     .json({
       message :"Item increased ",
-      success : true 
+      success : true
     });
   }
   catch(er) {

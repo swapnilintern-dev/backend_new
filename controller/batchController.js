@@ -8,6 +8,7 @@ import {
     normalizeAllocations,
     InsufficientStockError,
 } from "../utils/inventory.js";
+import { parseDateInput } from "../utils/parseDate.js";
 
 // ===========================================================================
 // Batch CRUD — Marketing manages the inventory lots behind a product.
@@ -30,6 +31,20 @@ import {
 // --- Validation helpers ----------------------------------------------------
 
 const num = (v) => (v === undefined || v === null || v === "" ? undefined : Number(v));
+
+/// Marker returned when a date was sent but could not be understood, so the
+/// caller answers 400 instead of writing an Invalid Date into the lot. Every
+/// format the rest of the app accepts is listed in utils/parseDate.js.
+const BAD_DATE = Symbol("bad-date");
+
+/// undefined → not sent · BAD_DATE → sent but unparseable · Date → parsed.
+const batchDate = (v) => {
+    if (v === undefined || v === null || v === "") return undefined;
+    return parseDateInput(v) ?? BAD_DATE;
+};
+
+const DATE_HINT =
+    "Use DD-MM-YYYY (31-12-2028) or YYYY-MM-DD (2028-12-31).";
 
 /// Shared field validation for add/update. Returns a string error message, or
 /// null when valid. `merged` is the effective batch after applying the update.
@@ -192,6 +207,21 @@ export const addProductBatch = async (req, res) => {
         const available =
             num(b.available_quantity) !== undefined ? num(b.available_quantity) : purchase;
 
+        const mfgDate = batchDate(b.manufacturing_date);
+        const expDate = batchDate(b.expiry_date);
+        if (mfgDate === BAD_DATE) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid manufacturing date. ${DATE_HINT}`,
+            });
+        }
+        if (expDate === BAD_DATE) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid expiry date. ${DATE_HINT}`,
+            });
+        }
+
         const draft = {
             product_id: productId,
             batch_number: b.batch_number ? String(b.batch_number).trim() : "",
@@ -199,8 +229,8 @@ export const addProductBatch = async (req, res) => {
             available_quantity: available,
             purchase_price: num(b.purchase_price) ?? 0,
             selling_price: num(b.selling_price) ?? 0,
-            manufacturing_date: b.manufacturing_date ? new Date(b.manufacturing_date) : undefined,
-            expiry_date: b.expiry_date ? new Date(b.expiry_date) : undefined,
+            manufacturing_date: mfgDate,
+            expiry_date: expDate,
             supplier: b.supplier || "",
         };
 
@@ -283,10 +313,24 @@ export const updateProductBatch = async (req, res) => {
         setIf("selling_price", num(b.selling_price));
         setIf("supplier", b.supplier);
         if (b.manufacturing_date !== undefined) {
-            existing.manufacturing_date = b.manufacturing_date ? new Date(b.manufacturing_date) : undefined;
+            const mfgDate = batchDate(b.manufacturing_date);
+            if (mfgDate === BAD_DATE) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid manufacturing date. ${DATE_HINT}`,
+                });
+            }
+            existing.manufacturing_date = mfgDate;
         }
         if (b.expiry_date !== undefined) {
-            existing.expiry_date = b.expiry_date ? new Date(b.expiry_date) : undefined;
+            const expDate = batchDate(b.expiry_date);
+            if (expDate === BAD_DATE) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid expiry date. ${DATE_HINT}`,
+                });
+            }
+            existing.expiry_date = expDate;
         }
 
         const invalid = validateBatch({

@@ -6,6 +6,7 @@ import ProductBatch from "../model/productBatchModel.js";
 import Vendor from "../model/userModel.js";
 import { MAX_PRODUCT_IMAGES, MAX_IMAGE_BYTES } from "../middlewares/multer.js";
 import { withInventoryTxn, recalcProductStock } from "../utils/inventory.js";
+import { parseDateInput } from "../utils/parseDate.js";
 
 // Naye saved/share controllers `product` (lowercase) aur `Vendor` reference
 // karte hain — pehle ye import hi nahi the → ReferenceError → 500.
@@ -26,6 +27,34 @@ async function uploadImageBuffer(buffer) {
   const fileUri = `data:image/jpeg;base64,${optimized.toString("base64")}`;
   const res = await cloudinary.uploader.upload(fileUri, { folder: "products" });
   return { url: res.secure_url, publicId: res.public_id };
+}
+
+/// Uploads an image that already lives at a public URL (the CSV/Excel import
+/// path) by handing the link to Cloudinary, which fetches it server-side.
+///
+/// The stored asset is put through the SAME shape as an uploaded file — max
+/// 800x800, JPEG q80 — so a product's images look identical no matter whether
+/// marketing picked them from the gallery or an import supplied a link. We keep
+/// the returned publicId, so replace/delete works exactly like any other image
+/// (a raw third-party URL would leave us unable to clean anything up).
+async function uploadImageUrl(url) {
+  try {
+    const res = await cloudinary.uploader.upload(url, {
+      folder: "products",
+      resource_type: "image",
+      transformation: [{ width: 800, height: 800, crop: "limit", quality: 80 }],
+      format: "jpg",
+    });
+    return { url: res.secure_url, publicId: res.public_id };
+  } catch (e) {
+    // Name the offending link — in a 200-row import "one image failed" is
+    // useless, "row with THIS url failed" is actionable.
+    const err = new Error(
+      `Could not fetch image "${url}": ${e.message || "unreachable"}`
+    );
+    err.statusCode = 400;
+    throw err;
+  }
 }
 
 /// Streams a (potentially large) video buffer to Cloudinary. Streaming avoids
@@ -72,10 +101,82 @@ function collectImageFiles(req) {
   return files;
 }
 
+/// Collects image LINKS from the request body — the second way to give a
+/// product its pictures, used by a CSV/Excel import where there is no file to
+/// upload. Both spellings of the sheet's column are accepted:
+///
+///   imageUrls: ["https://cdn/1.jpg", "https://cdn/2.jpg"]   (JSON array)
+///   imageUrls: "https://cdn/1.jpg, https://cdn/2.jpg"       (comma separated)
+///
+/// This is ADDITIVE: file uploads keep working untouched, and a request may
+/// even mix both (files first, then links). Only http(s) links are accepted —
+/// a typo'd cell must fail loudly, never be stored as a broken image.
+///
+/// Exported so the parsing rules can be tested directly, without a request.
+export function collectImageUrls(req) {
+  const raw = req.body && (req.body.imageUrls ?? req.body.imageUrl);
+  if (raw === undefined || raw === null || raw === "") return [];
+
+  let list;
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else {
+    const text = String(raw).trim();
+    if (text.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(text);
+        list = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        const err = new Error("imageUrls must be a JSON array or a comma-separated list");
+        err.statusCode = 400;
+        throw err;
+      }
+    } else {
+      list = text.split(",");
+    }
+  }
+
+  const urls = list
+    .map((u) => (u === null || u === undefined ? "" : String(u).trim()))
+    .filter((u) => u !== "");
+
+  for (const u of urls) {
+    let parsed;
+    try {
+      parsed = new URL(u);
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
+      const err = new Error(`"${u}" is not a valid image URL (must start with http:// or https://)`);
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+
+  return urls;
+}
+
 /// The single video file from a multer.fields() request, or null.
 function firstVideoFile(req) {
   const v = req.files && req.files.video;
   return v && v.length ? v[0] : null;
+}
+
+/// Parses one date off a `batches[]` entry. Absent → undefined (the field is
+/// optional); present but unparseable → a 400 naming the batch, so an import of
+/// 200 rows says WHICH lot is wrong instead of failing anonymously.
+function batchDate(value, batchNumber, label) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = parseDateInput(value);
+  if (!parsed) {
+    const e = new Error(
+      `Batch "${batchNumber}": invalid ${label}. Use DD-MM-YYYY (31-12-2028) or YYYY-MM-DD (2028-12-31).`
+    );
+    e.statusCode = 400;
+    throw e;
+  }
+  return parsed;
 }
 
 const addnewProduct = async (req, res) => {
@@ -125,20 +226,25 @@ const addnewProduct = async (req, res) => {
     }
     const hasBatchesArray = Array.isArray(batchDrafts) && batchDrafts.length > 0;
 
-    // Media: up to MAX_PRODUCT_IMAGES images (field `images[]`, or the legacy
-    // single `image`) + one optional promotional video (field `video`).
+    // Media: up to MAX_PRODUCT_IMAGES images from EITHER source (or both) —
+    // uploaded files (`images[]`, or the legacy single `image`) and/or links in
+    // `imageUrls` (the CSV/Excel import path) — plus one optional promotional
+    // video (field `video`).
     const imageFiles = collectImageFiles(req);
+    const imageUrls = collectImageUrls(req);
+    const totalImages = imageFiles.length + imageUrls.length;
     const videoFile = firstVideoFile(req);
 
     // Validation
-    if (imageFiles.length === 0) {
+    if (totalImages === 0) {
       return res.status(400).json({
         success: false,
-        message: "At least one product image is required",
+        message:
+          "At least one product image is required — upload a file or send an imageUrls link",
       });
     }
 
-    if (imageFiles.length > MAX_PRODUCT_IMAGES) {
+    if (totalImages > MAX_PRODUCT_IMAGES) {
       return res.status(400).json({
         success: false,
         message: `A product can have at most ${MAX_PRODUCT_IMAGES} images`,
@@ -177,11 +283,14 @@ const addnewProduct = async (req, res) => {
           message: "Expiry date is required",
         });
       }
-      parsedExpiry = new Date(exp_date);
-      if (isNaN(parsedExpiry.getTime())) {
+      // Accepts 31-12-2028, 2028-12-31, a full ISO timestamp or an Excel serial
+      // — all normalised to the same instant (see utils/parseDate.js).
+      parsedExpiry = parseDateInput(exp_date);
+      if (!parsedExpiry) {
         return res.status(400).json({
           success: false,
-          message: "Invalid expiry date",
+          message:
+            "Invalid expiry date. Use DD-MM-YYYY (31-12-2028) or YYYY-MM-DD (2028-12-31).",
         });
       }
       // Reject an already-expired date when ADDING new stock. Historical dates
@@ -196,10 +305,12 @@ const addnewProduct = async (req, res) => {
       }
     }
 
-    // Upload every image (order preserved) and the video, in parallel.
-    const image = await Promise.all(
-      imageFiles.map((f) => uploadImageBuffer(f.buffer))
-    );
+    // Upload every image (order preserved — files first, then links) and the
+    // video, in parallel.
+    const image = await Promise.all([
+      ...imageFiles.map((f) => uploadImageBuffer(f.buffer)),
+      ...imageUrls.map((u) => uploadImageUrl(u)),
+    ]);
     const video = videoFile ? await uploadVideoBuffer(videoFile.buffer) : undefined;
 
     // Multipart sends everything as strings — parse numbers/booleans safely.
@@ -268,6 +379,10 @@ const addnewProduct = async (req, res) => {
               e.statusCode = 400;
               throw e;
             }
+            // Same date rules as the single-batch path — a lot's dates must not
+            // depend on which shape the client used to send it.
+            const mfg = batchDate(bb.manufacturing_date, bb.batch_number, "manufacturing date");
+            const exp = batchDate(bb.expiry_date, bb.batch_number, "expiry date");
             return {
               product_id: product._id,
               batch_number: String(bb.batch_number).trim(),
@@ -275,10 +390,8 @@ const addnewProduct = async (req, res) => {
               available_quantity: available,
               purchase_price: num(bb.purchase_price, 0),
               selling_price: num(bb.selling_price, 0),
-              manufacturing_date: bb.manufacturing_date
-                ? new Date(bb.manufacturing_date)
-                : undefined,
-              expiry_date: bb.expiry_date ? new Date(bb.expiry_date) : undefined,
+              manufacturing_date: mfg,
+              expiry_date: exp,
               supplier: bb.supplier || "",
             };
           });
@@ -324,7 +437,10 @@ const addnewProduct = async (req, res) => {
   } catch (error) {
     console.error("Add Product Error:", error);
 
-    return res.status(500).json({
+    // Bad input (an oversized image, a malformed or unreachable imageUrls link)
+    // carries its own statusCode — answer 400 so the caller can fix the row,
+    // instead of reporting a client mistake as a server failure.
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });
@@ -454,11 +570,12 @@ export const updateProduct = async (req, res) => {
     // here on purpose — editing a medicine may legitimately correct historical
     // batch data. An unparseable value is rejected outright.
     if (b.exp_date !== undefined && b.exp_date !== "") {
-      const d = new Date(b.exp_date);
-      if (isNaN(d.getTime())) {
+      const d = parseDateInput(b.exp_date);
+      if (!d) {
         return res.status(400).json({
           success: false,
-          message: "Invalid expiry date",
+          message:
+            "Invalid expiry date. Use DD-MM-YYYY (31-12-2028) or YYYY-MM-DD (2028-12-31).",
         });
       }
       existing.exp_date = d;
@@ -466,14 +583,16 @@ export const updateProduct = async (req, res) => {
 
     // ---- Images ------------------------------------------------------------
     // The client sends `keptImages` — a JSON array of the existing images it
-    // wants to keep, in the desired display order — plus any brand-new files in
-    // the `images[]` field. We only touch images when the client signals intent
-    // (sends keptImages OR uploads new files); a plain field update (e.g. an
-    // active-toggle) leaves the media untouched.
+    // wants to keep, in the desired display order — plus any brand-new images,
+    // as uploaded files in `images[]` and/or links in `imageUrls`. We only touch
+    // images when the client signals intent (sends keptImages OR supplies new
+    // images); a plain field update (e.g. an active-toggle) leaves the media
+    // untouched.
     const newImageFiles = collectImageFiles(req);
+    const newImageUrls = collectImageUrls(req);
     const hasKeptField = b.keptImages !== undefined;
 
-    if (hasKeptField || newImageFiles.length > 0) {
+    if (hasKeptField || newImageFiles.length > 0 || newImageUrls.length > 0) {
       let kept = [];
       if (hasKeptField) {
         let parsed;
@@ -516,10 +635,12 @@ export const updateProduct = async (req, res) => {
         }
       }
 
-      // Upload new files (order preserved) and append after the kept ones.
-      const uploaded = await Promise.all(
-        newImageFiles.map((f) => uploadImageBuffer(f.buffer))
-      );
+      // Upload new images (order preserved — files first, then links) and
+      // append them after the kept ones.
+      const uploaded = await Promise.all([
+        ...newImageFiles.map((f) => uploadImageBuffer(f.buffer)),
+        ...newImageUrls.map((u) => uploadImageUrl(u)),
+      ]);
       const finalImages = [...kept, ...uploaded];
 
       if (finalImages.length === 0) {
@@ -588,7 +709,9 @@ export const updateProduct = async (req, res) => {
             only.batch_number = String(b.batch_no).trim();
           }
           if (b.exp_date !== undefined && b.exp_date !== "") {
-            only.expiry_date = new Date(b.exp_date);
+            // Already parsed + validated onto `existing` above — reuse it so the
+            // lot and the product mirror can never hold two different instants.
+            only.expiry_date = existing.exp_date;
           }
           await only.save({ session });
           await recalcProductStock(id, session);
@@ -604,8 +727,9 @@ export const updateProduct = async (req, res) => {
               purchase_quantity: initial,
               available_quantity: initial,
               selling_price: existing.price,
-              expiry_date:
-                (b.exp_date && new Date(b.exp_date)) || existing.exp_date,
+              // `existing.exp_date` already carries the newly-parsed value when
+              // one was sent, and the stored one otherwise.
+              expiry_date: existing.exp_date,
             }],
             { session }
           );
@@ -628,7 +752,8 @@ export const updateProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Product Error:", error);
-    return res.status(500).json({
+    // Same rule as add: a client-side input problem answers 400, not 500.
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });

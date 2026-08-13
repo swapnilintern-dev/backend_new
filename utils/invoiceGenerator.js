@@ -20,14 +20,17 @@ import Vendor from "../model/userModel.js";
 import invoice from "../model/invoiceModel.js";
 import { generateInvoiceHTML } from "../templates/invoiceTemplate.js";
 import { normalizeFreeQty } from "./freeGoods.js";
+import { buildInvoiceItems, invoiceRow } from "./invoiceItems.js";
 import { generatePDF } from "./generatePdf.js";
 import cloudinary from "./cloudinary.js";
 
 const inr = { day: "2-digit", month: "long", year: "numeric" };
 
-/// The batch number(s) printed for an order line: every lot its FEFO allocation
-/// consumed, joined with " + ". Degrades to the line's single-batch snapshot and
-/// then the product's mirror, so pre-multi-batch orders print exactly as before.
+/// The batch number printed for an order line BEFORE it is split into one row
+/// per lot (see utils/invoiceItems.js) — so in practice this supplies the batch
+/// for single-lot lines, and the fallback for pre-multi-batch orders that have
+/// no allocation snapshot at all: the line's own snapshot, then the product's
+/// mirror. Multi-lot lines get their number from the split instead.
 const allocatedBatchNo = (it) => {
     const numbers = (it.allocations || [])
         .map((a) => a.batch_number)
@@ -100,34 +103,29 @@ export const generateInvoiceForOrder = async (orderId) => {
             invoice_no: invoiceNumber,
             invoice_date: new Date().toLocaleDateString("en-IN", inr),
 
-            items: items.map((it) => ({
-                title: it.product?.title,
-                hsnCode: it.product?.hsnCode || "N/A",
-                mrp: it.product?.mrp,
-                gstPercent: it.product?.gstPercent,
-                disPercent: it.product?.discountPercent || "N/A",
-                // Merged into the single "MFG/Mkt By" column by the template.
-                manufacturer: it.product?.manufacturer || "N/A",
-                marketedBy: it.product?.marketedBy || "N/A",
-                // The exact lot(s) this line consumed, read off the FEFO
-                // allocation snapshotted at order creation. A line that drew
-                // from several lots prints them all ("B1 + B2"), so the document
-                // always states precisely which stock was handed over. Falls
-                // back to the line's single-batch snapshot, then the product,
-                // for orders placed before each of those existed.
-                batch_no: allocatedBatchNo(it),
-                exp_date: it.allocations?.[0]?.expiry_date
-                    || it.exp_date
-                    || it.product?.exp_date
-                    || "N/A",
-                quantity: it.quantity,
-                // FREE GOODS column — read straight off the order line, so the
-                // invoice always shows what the database holds. Orders placed
-                // before the field existed have no value and print 0.
-                freeQty: normalizeFreeQty(it.freeQty),
-                price: it.orderPrice ?? it.product?.price,
-                amount: lineAmount(it),
-            })),
+            // One row PER BATCH the line consumed — a medicine drawn from two
+            // lots prints as two rows, each with its own batch/expiry/quantity.
+            // total_item below stays the LINE count, unchanged.
+            items: buildInvoiceItems(
+                items,
+                (it) => invoiceRow(it.product, {
+                    quantity: it.quantity,
+                    // FREE GOODS — read straight off the order line, so the
+                    // invoice always shows what the database holds. Orders
+                    // placed before the field existed print 0.
+                    freeQty: normalizeFreeQty(it.freeQty),
+                    price: it.orderPrice ?? it.product?.price,
+                    amount: lineAmount(it),
+                    // The lot(s) this line consumed, off the FEFO snapshot taken
+                    // at order creation. Multi-lot lines are split into a row
+                    // each below, so the joined "B1 + B2" form only ever shows
+                    // on a line whose quantities no longer add up (see
+                    // splitRowByBatch) — a deliberate, visible anomaly.
+                    batch_no: allocatedBatchNo(it),
+                    exp_date: it.allocations?.[0]?.expiry_date || it.exp_date,
+                }),
+                (it) => it.allocations
+            ),
 
             total_item: items.length,
             total_qty: totalQty,

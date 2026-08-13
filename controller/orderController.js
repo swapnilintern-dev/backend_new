@@ -12,6 +12,7 @@ import outletStock from "../model/outletStockModel.js";
 import { generatePDF } from "../utils/generatePdf.js";
 import cloudinary from "../utils/cloudinary.js";
 import { normalizeFreeQty } from "../utils/freeGoods.js";
+import { buildInvoiceItems, invoiceRow } from "../utils/invoiceItems.js";
 import {
     withInventoryTxn,
     allocateFEFO,
@@ -209,23 +210,27 @@ export const placeOrder = async (req, res) => {
                 })
                 ,
 
-                items: cartSnapshot.map(item => ({
-                    title: item.product.title,
-                    hsnCode: item.product.hsnCode || "N/A",
-                    mrp: item.product.mrp,
-                    gstPercent: item.product.gstPercent,
-                    disPercent: item.product.discountPercent || "N/A",
-                    // Merged into the single "MFG/Mkt By" column by the template.
-                    manufacturer: item.product.manufacturer || "N/A",
-                    marketedBy: item.product.marketedBy || "N/A",
-                    batch_no: item.product.batch_no || "N/A",
-                    exp_date: item.product.exp_date || "N/A",
-                    quantity: item.quantity,
-                    // FREE GOODS column — free units on this line, never priced.
-                    freeQty: normalizeFreeQty(item.freeQty),
-                    price: item.product.price,
-                    amount: item.product.price * item.quantity
-                })),
+                // One row PER BATCH the line consumed. The FEFO snapshot lives
+                // on the order line the transaction just created, which was
+                // built by iterating user.cart in order — so orderItems[i]
+                // is the same line as cartSnapshot[i]. total_item below stays
+                // the LINE count, unchanged.
+                items: buildInvoiceItems(
+                    cartSnapshot,
+                    (item, i) => invoiceRow(item.product, {
+                        quantity: item.quantity,
+                        // FREE GOODS — free units on this line, never priced.
+                        freeQty: normalizeFreeQty(item.freeQty),
+                        price: item.product.price,
+                        amount: item.product.price * item.quantity,
+                        // The lot actually sold, off the order line's snapshot —
+                        // NOT product.batch_no, which is only the current
+                        // FEFO-front lot and may already have moved on.
+                        batch_no: Order.orderItems[i]?.batch_no,
+                        exp_date: Order.orderItems[i]?.exp_date,
+                    }),
+                    (_item, i) => Order.orderItems[i]?.allocations
+                ),
 
                 total_item: cartSnapshot.length,
                 total_qty,
