@@ -17,8 +17,8 @@ const agentAccount = async (req, res) => {
         }
 
         const autoGenrated = Math.floor(100000 + (Math.random() * 900000));
-
-        console.log("auto genrated password is :", autoGenrated);
+        // Not logged — it is the agent's actual login password, and it is
+        // emailed to them below.
 
         const agentDetails = await Vendor.create({
             contact_person_name:fullName ,

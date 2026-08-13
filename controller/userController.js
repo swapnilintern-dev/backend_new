@@ -106,8 +106,8 @@ export const registerVendor = async (req, res) => {
     console.log("raw is:", drugUpload);
 
     let autoPassword = Math.floor(1000 + Math.random() * 9000);
-
-    console.log("auto generated password is :", autoPassword);
+    // Not logged — it is the vendor's actual login password, and it is already
+    // delivered to them by email below.
 
     const vendor = await Vendor.create({
       vendor_type,
@@ -259,8 +259,9 @@ export const login = async (req, res) => {
         });
     }
 
-    console.log("enter password ", password, "data base password is :", user.password);
-
+    // NEVER log credentials. This line used to print the submitted password AND
+    // the stored one on every single login attempt, which put every account's
+    // password in the hosting provider's log retention in plaintext.
 
     if (password !== user.password) {
 
