@@ -1,13 +1,62 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
-const WhatsAppMessageSchema = new mongoose.Schema({
-  from: { type: String, required: true }, // ग्राहक का व्हाट्सएप नंबर
-  wamid: { type: String, required: true, unique: true }, // Meta का यूनिक मैसेज ID
-  messageType: { type: String, required: true }, // text, image, document आदि
-  textBody: { type: String }, // अगर टेक्स्ट मैसेज है तो उसका कंटेंट
-  timestamp: { type: Date, default: Date.now },
-  status: { type: String, default: 'received' } // received, delivered, read
-}, { timestamps: true });
+const whatsappWebhookSchema = new mongoose.Schema(
+  {
+    eventType: {
+      type: String,
+      default: null,
+    },
 
-const WhatsAppMessage = mongoose.model('WhatsAppMessage', WhatsAppMessageSchema);
-export default WhatsAppMessage;
+    messageId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
+    from: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
+    phoneNumberId: {
+      type: String,
+      default: null,
+    },
+
+    messageType: {
+      type: String,
+      default: null,
+    },
+
+    messageText: {
+      type: String,
+      default: null,
+    },
+
+    status: {
+      type: String,
+      default: null,
+    },
+
+    rawPayload: {
+      type: mongoose.Schema.Types.Mixed,
+      required: true,
+    },
+
+    processed: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+const WhatsAppWebhook = mongoose.model(
+  "WhatsAppWebhook",
+  whatsappWebhookSchema
+);
+
+export default WhatsAppWebhook;

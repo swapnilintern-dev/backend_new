@@ -1,12 +1,26 @@
-import express from "express"
-import { receiveMessage, verifyWebhook } from "../controller/whtspwebhookController.js";
+import express from "express";
 
+import {
+  verifyWhatsAppWebhook,
+  receiveWhatsAppWebhook,
+} from "../controllers/whatsapp.controller.js";
 
-const router = express.Router() ;
+const router = express.Router();
 
+/**
+ * Meta Webhook Verification
+ */
+router.get(
+  "/webhook",
+  verifyWhatsAppWebhook
+);
 
-router.get('/whatsapp/webhook' , verifyWebhook ) ;
-router.post('/whatsapp/webhook' , receiveMessage ) ;
+/**
+ * WhatsApp Incoming Events
+ */
+router.post(
+  "/webhook",
+  receiveWhatsAppWebhook
+);
 
-
-export default router ;
+export default router;

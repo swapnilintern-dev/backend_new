@@ -25,7 +25,7 @@ import marketing_agentRouter from "./routes/agentRoute.js";
 import batchRouter from "./routes/batchRoute.js";
 import notificationRouter from "./routes/notificationRoute.js";
 import { startNotificationScheduler } from "./utils/notificationScheduler.js";
-import whtspwebHookRouter from "./routes/whatsapRoute.js"
+import whatsappRoute from "./routes/whatsapRoute.js"
 
 const app = express();
 
@@ -65,8 +65,10 @@ app.use('/vsArogya', outletRouter);
 app.use('/vsArogya', marketing_agentRouter);
 app.use('/vsArogya', batchRouter);
 app.use('/vsArogya', notificationRouter);
-app.use('/vsArogya' , whtspwebHookRouter ) ;
-
+app.use(
+  "/vsArogya/whatsapp",
+  whatsappRoute
+);
 
 
 app.get('/', (req, res) => {

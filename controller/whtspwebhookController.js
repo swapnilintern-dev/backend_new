@@ -1,64 +1,206 @@
-import WhatsAppMessage from '../models/WhatsAppMessage.js'; // ध्यान दें: ES Modules में .js लिखना जरूरी है
+// import WhatsAppWebhook from "../models/whatsappWebhook.model.js";
 
-// 1. GET Request: Meta Webhook Verification
-export const verifyWebhook = (req, res) => {
-  // आपके द्वारा Meta पर डाला गया सीक्रेट टोकन
-//   const VERIFY_TOKEN = "whatsappwebhookdfghertyudvbnr678456efv8i₹12";
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN  || "whatsappwebhookdfghertyudvbnr678456efv8i₹12"
+import WhatsAppWebhook from "../model/whtspmsgModel.js";
 
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+/**
+ * GET
+ * /vsArogya/whatsapp/webhook
+ *
+ * Meta uses this endpoint to verify the webhook.
+ */
+export const verifyWhatsAppWebhook = async (req, res) => {
+  try {
+    console.log("🔍 WhatsApp webhook verification request");
 
-  if (mode && token) {
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('WEBHOOK_VERIFIED');
-      return res.status(200).send(challenge); // Meta को challenge वापस भेजना जरूरी है
-    } else {
-      return res.sendStatus(403); // अगर टोकन मैच नहीं हुआ
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    console.log("Mode:", mode);
+    console.log("Token received:", token);
+    console.log("Challenge:", challenge);
+
+    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+
+    if (!verifyToken) {
+      console.error(
+        "❌ WHATSAPP_VERIFY_TOKEN is missing in environment variables"
+      );
+
+      return res.sendStatus(500);
     }
+
+    if (
+      mode === "subscribe" &&
+      token === verifyToken
+    ) {
+      console.log("✅ WhatsApp webhook verified successfully");
+
+      return res.status(200).send(challenge);
+    }
+
+    console.log("❌ Invalid verify token");
+
+    return res.sendStatus(403);
+
+  } catch (error) {
+    console.error(
+      "❌ WhatsApp verification error:",
+      error
+    );
+
+    return res.sendStatus(500);
   }
-  return res.sendStatus(400);
 };
 
-// 2. POST Request: Incoming Messages handling from Meta
-export const receiveMessage = async (req, res) => {
+
+/**
+ * POST
+ * /vsArogya/whatsapp/webhook
+ *
+ * Meta sends WhatsApp messages/status updates here.
+ */
+export const receiveWhatsAppWebhook = async (req, res) => {
   try {
     const body = req.body;
 
-    // चेक करें कि यह व्हाट्सएप का ही इवेंट ऑब्जेक्ट है
-    if (body.object === 'whatsapp_business_account') {
-      if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages) {
-        
-        const messageData = body.entry[0].changes[0].value.messages[0];
-        const from = messageData.from; // ग्राहक का नंबर
-        const wamid = messageData.id; // मैसेज की यूनिक ID
-        const type = messageData.type; // मैसेज का टाइप
+    console.log(
+      "📩 WhatsApp webhook received:"
+    );
 
-        let textBody = '';
-        if (type === 'text') {
-          textBody = messageData.text.body;
-        }
+    console.log(
+      JSON.stringify(body, null, 2)
+    );
 
-        // डेटाबेस में मैसेज सेव करना
-        const newMessage = new WhatsAppMessage({
-          from,
-          wamid,
-          messageType: type,
-          textBody
-        });
+    // Check WhatsApp event
+    if (
+      body?.object !==
+      "whatsapp_business_account"
+    ) {
+      console.log(
+        "⚠️ Not a WhatsApp Business event"
+      );
 
-        await newMessage.save();
-        console.log(`New message saved from ${from}: ${textBody}`);
-      }
-
-      // Meta को हमेशा 200 OK रिस्पॉन्स देना जरूरी है, नहीं तो वो एरर मानेगा
-      return res.status(200).send('EVENT_RECEIVED');
-    } else {
       return res.sendStatus(404);
     }
+
+    // Loop through entries
+    for (const entry of body.entry || []) {
+
+      for (const change of entry.changes || []) {
+
+        if (change.field !== "messages") {
+          continue;
+        }
+
+        const value = change.value;
+
+        const phoneNumberId =
+          value?.metadata?.phone_number_id;
+
+        /**
+         * ==========================
+         * INCOMING MESSAGES
+         * ==========================
+         */
+
+        if (value?.messages) {
+
+          for (const message of value.messages) {
+
+            let messageText = null;
+
+            if (message.type === "text") {
+              messageText =
+                message.text?.body || null;
+            }
+
+            await WhatsAppWebhook.create({
+              eventType: "message",
+
+              messageId:
+                message.id || null,
+
+              from:
+                message.from || null,
+
+              phoneNumberId,
+
+              messageType:
+                message.type || null,
+
+              messageText,
+
+              rawPayload: message,
+
+              processed: false,
+            });
+
+            console.log(
+              "💾 WhatsApp message saved"
+            );
+
+            console.log({
+              from: message.from,
+              type: message.type,
+              text: messageText,
+            });
+          }
+        }
+
+
+        /**
+         * ==========================
+         * MESSAGE STATUS
+         * ==========================
+         */
+
+        if (value?.statuses) {
+
+          for (const status of value.statuses) {
+
+            await WhatsAppWebhook.create({
+              eventType: "status",
+
+              messageId:
+                status.id || null,
+
+              status:
+                status.status || null,
+
+              phoneNumberId,
+
+              rawPayload: status,
+
+              processed: false,
+            });
+
+            console.log(
+              "📊 WhatsApp status:",
+              status.status
+            );
+          }
+        }
+      }
+    }
+
+    /**
+     * IMPORTANT
+     * Meta expects HTTP 200.
+     */
+    return res.sendStatus(200);
+
   } catch (error) {
-    console.error('Webhook Error:', error);
-    return res.status(500).send('Internal Server Error');
+
+    console.error(
+      "❌ WhatsApp webhook error:",
+      error
+    );
+
+    /**
+     * We still return 200 so Meta
+     * doesn't keep retrying the event.
+     */
+    return res.sendStatus(200);
   }
 };
