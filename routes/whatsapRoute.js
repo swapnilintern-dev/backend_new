@@ -1,9 +1,10 @@
 import express from "express";
+import { receiveWhatsAppWebhook, verifyWhatsAppWebhook } from "../controller/whtspwebhookController.js";
 
-import {
-  verifyWhatsAppWebhook,
-  receiveWhatsAppWebhook,
-} from "../controllers/whatsapp.controller.js";
+// import {
+//   verifyWhatsAppWebhook,
+//   receiveWhatsAppWebhook,
+// } from "../controllers/whatsapp.controller.js";
 
 const router = express.Router();
 

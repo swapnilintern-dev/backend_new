@@ -1,6 +1,8 @@
 // import WhatsAppWebhook from "../models/whatsappWebhook.model.js";
 
-import WhatsAppWebhook from "../model/whtspmsgModel.js";
+import WhatsAppWebhook from "../model/whtspmsgModel";
+
+// import WhatsAppWebhook from "../model/whtspmsgModel.js";
 
 /**
  * GET
