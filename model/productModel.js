@@ -66,8 +66,13 @@ const productSchema = new mongoose.Schema({
     quantity:{
         type : String ,
         default :"1"
-    }
-
+    },
+ drDisPercent : {
+        type : String 
+    },
+    wholesellerPercent :{
+        type : String 
+    },
 } ,{timestamps: true} ) ;
 
 // --- Live expiry flag (Feature 2/4) --------------------------------------

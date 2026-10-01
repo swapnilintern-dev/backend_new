@@ -26,6 +26,15 @@ import batchRouter from "./routes/batchRoute.js";
 import notificationRouter from "./routes/notificationRoute.js";
 import { startNotificationScheduler } from "./utils/notificationScheduler.js";
 import whatsappRoute from "./routes/whatsapRoute.js"
+import bulkUploadRouter from "./routes/bulkUploadRoute.js";
+import notificationRouter from "./routes/notificationRoute.js"
+// import whtspotpRouter from "./routes/whtspotpRoute.js" ;
+import eotpRouter from "./routes/eotpRoute.js"
+app.use(
+  "/vsArogya/whatsapp",
+  whatsappRoute
+);
+
 
 const app = express();
 
@@ -64,12 +73,10 @@ app.use('/vsArogya', xlshRouter);
 app.use('/vsArogya', outletRouter);
 app.use('/vsArogya', marketing_agentRouter);
 app.use('/vsArogya', batchRouter);
-app.use('/vsArogya', notificationRouter);
-app.use(
-  "/vsArogya/whatsapp",
-  whatsappRoute
-);
+app.use('/vsArogya' , notificationRouter ) ;
+app.use('/vsArogya' , bulkUploadRouter ) ;
 
+app.use('/vsArogya' , eotpRouter);
 
 app.get('/', (req, res) => {
     res.send("<h1> This is from server side </h1>");
