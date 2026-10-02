@@ -3,8 +3,9 @@ import { sendOtp, verifyOtpAndLogin } from "../controller/emailverifyController.
 
 const router = express.Router() ;
 
-router.post('eotp', sendOtp);
-router.post('eotp-verify' , verifyOtpAndLogin
-)
+// Paths need the leading slash — Express 5 does not normalise "eotp" into
+// "/eotp", so without it neither route is ever reachable.
+router.post('/eotp', sendOtp);
+router.post('/eotp-verify', verifyOtpAndLogin);
 
 export default router ;

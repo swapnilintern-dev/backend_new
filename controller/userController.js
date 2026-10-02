@@ -317,7 +317,15 @@ export const login = async (req, res) => {
         // Agent role scopes its pincode-wise order/vendor calls on these.
         id: user._id,
         pincode: user.pin_code,
-        name: user.contact_person_name || user.store_name
+        name: user.contact_person_name || user.store_name,
+        // Buyer type. The catalogue prices one product three ways
+        // (base / drDisPercent / wholesellerPercent) and the app picks the rate
+        // card from these two fields, so they have to ride along with the
+        // session — there is no "my profile" endpoint to fetch them from.
+        vendor_type: user.vendor_type,
+        shop_type: user.shop_type,
+        email: user.email,
+        approvalStatus: user.approvalStatus
       });
 
   }

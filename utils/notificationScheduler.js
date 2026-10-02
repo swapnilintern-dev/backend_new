@@ -1,4 +1,4 @@
-import Notification from "../model/notificationModel.js";
+import Notification from "../model/broadcastNotificationModel.js";
 import NotificationReceipt from "../model/notificationReceiptModel.js";
 import DeviceToken from "../model/deviceTokenModel.js";
 import { broadcastNotification } from "./notificationBroadcast.js";

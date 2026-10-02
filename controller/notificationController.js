@@ -7,7 +7,7 @@ import DeviceToken from "../model/deviceTokenModel.js";
 import Notification, {
   NOTIFICATION_CATEGORIES,
   NOTIFICATION_PRIORITIES,
-} from "../model/notificationModel.js";
+} from "../model/broadcastNotificationModel.js";
 import NotificationReceipt from "../model/notificationReceiptModel.js";
 import {
   broadcastNotification,

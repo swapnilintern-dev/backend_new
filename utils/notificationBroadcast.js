@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 import Vendor from "../model/userModel.js";
 import DeviceToken from "../model/deviceTokenModel.js";
-import Notification from "../model/notificationModel.js";
+import Notification from "../model/broadcastNotificationModel.js";
 import NotificationReceipt from "../model/notificationReceiptModel.js";
 import { sendToTokens, isPushConfigured, pushUnavailableReason } from "./fcm.js";
 

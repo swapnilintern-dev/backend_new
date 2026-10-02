@@ -1,10 +1,19 @@
+// Load .env BEFORE anything else is imported.
+//
+// ESM hoists every `import` above the module body, so calling dotenv.config()
+// further down runs AFTER utils/razorpay.js and utils/cloudinary.js have already
+// been evaluated — and both read process.env at import time (their config()
+// calls sit at module top level). Importing "dotenv/config" here runs the load
+// as part of THIS import, so the env is populated before those modules are
+// pulled in below.
+import "dotenv/config";
+
 import dns from "node:dns";
 // Render's network can't reach Gmail SMTP over IPv6 (ENETUNREACH on :465).
 // Prefer IPv4 so nodemailer connects. Must run before any DNS lookups.
 dns.setDefaultResultOrder("ipv4first");
 
 import express, { urlencoded } from "express";
-import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import connectDb from "./utils/db.js";
@@ -27,24 +36,16 @@ import notificationRouter from "./routes/notificationRoute.js";
 import { startNotificationScheduler } from "./utils/notificationScheduler.js";
 import whatsappRoute from "./routes/whatsapRoute.js"
 import bulkUploadRouter from "./routes/bulkUploadRoute.js";
-import notificationRouter from "./routes/notificationRoute.js"
 // import whtspotpRouter from "./routes/whtspotpRoute.js" ;
 import eotpRouter from "./routes/eotpRoute.js"
-app.use(
-  "/vsArogya/whatsapp",
-  whatsappRoute
-);
-
 
 const app = express();
 
-
-dotenv.config();
 const port = process.env.PORT || 3000;
 
 
 
-// middlewares 
+// middlewares
 app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
@@ -57,7 +58,7 @@ const corsOptions = {
 }
 
 
-// all api 
+// all api
 app.use('/vsArogya', userRouter);
 app.use('/vsArogya', addProductRouter);
 app.use('/vsArogya', cardRouter);
@@ -77,6 +78,10 @@ app.use('/vsArogya' , notificationRouter ) ;
 app.use('/vsArogya' , bulkUploadRouter ) ;
 
 app.use('/vsArogya' , eotpRouter);
+
+// WhatsApp Business webhook (Meta calls GET to verify, POST for events).
+// Mounted on its own prefix because Meta owns the path shape.
+app.use("/vsArogya/whatsapp", whatsappRoute);
 
 app.get('/', (req, res) => {
     res.send("<h1> This is from server side </h1>");

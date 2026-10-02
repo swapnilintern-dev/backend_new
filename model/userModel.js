@@ -162,6 +162,15 @@ const vendorSchema = new mongoose.Schema(
       default: "Pending"
     },
 
+    // Last successful sign-in. Written by the email-OTP login
+    // (controller/emailverifyController.js), which also returns it. Declared
+    // here because Mongoose runs in strict mode: without the field the
+    // controller's write would be dropped silently and the value would never
+    // appear. Absent on accounts that have not signed in since this was added.
+    lastLogin: {
+      type: Date
+    },
+
     // Account-level push opt-in. The marketing broadcast skips vendors who
     // turned notifications off (their in-app notification center still fills,
     // they just get no push). Defaults to true so existing documents — which
