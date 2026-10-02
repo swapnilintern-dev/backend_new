@@ -10,6 +10,7 @@ import {
   logout,
   registerVendor,
   updateAddress,
+  updatePassword,
 } from "../controller/userController.js";
 import upload from "../middlewares/multer.js";
 
@@ -32,7 +33,7 @@ router.post(
   registerVendor
 );
 
-// router.put('/update-password', isAuthenticated, updatePassw);cd 
+router.put('/update-password', isAuthenticated, updatePassword);
 
 router.delete('/vendor-delete', isAuthenticated, deleteAccount);
 

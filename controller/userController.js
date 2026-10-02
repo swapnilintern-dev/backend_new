@@ -406,6 +406,94 @@ export const deleteAccount = async (req, res) => {
 
 
 // -----------------------------------------------------------------------------
+// PASSWORD UPDATE
+//
+// Serves BOTH app flows, because both end up proving the same thing — that the
+// caller controls the account — and then set a new password:
+//
+//   • Change Password (signed in)  → sends currentPassword, which must match.
+//   • Forgot Password (signed out) → the client first proves ownership of the
+//     email via POST /eotp + /eotp-verify, which mints a token; it then calls
+//     this with that token and NO currentPassword.
+//
+// Scoped by the JWT (req.id), so an account can only ever change its OWN
+// password.
+//
+// NOTE ON STORAGE: the password is written in plain text because that is how
+// every other path in this codebase already treats it — registerVendor saves
+// the raw value and login compares with `password !== user.password`. Hashing
+// here alone would lock the user out on their next sign-in. Moving the whole
+// system to bcrypt is a separate migration (the dependency is already
+// installed but unused).
+// -----------------------------------------------------------------------------
+
+const MIN_PASSWORD_LENGTH = 6;
+
+export const updatePassword = async (req, res) => {
+  try {
+    const newPassword = String(req.body?.newPassword || "");
+    const currentPassword = req.body?.currentPassword;
+
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password is required",
+      });
+    }
+
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      });
+    }
+
+    const user = await Vendor.findById(req.id).select("password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found",
+      });
+    }
+
+    // Only enforced when the client supplies it — the forgot-password flow has
+    // no current password to send, having already proved ownership by OTP.
+    if (currentPassword !== undefined && currentPassword !== null) {
+      if (String(currentPassword) !== String(user.password || "")) {
+        return res.status(401).json({
+          success: false,
+          message: "Your current password is incorrect",
+        });
+      }
+    }
+
+    if (String(user.password || "") === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "The new password must be different from the current one",
+      });
+    }
+
+    // updateOne, not save(): a full save would re-validate a document this
+    // request never touched, so an older vendor row missing a field could fail
+    // a password change that has otherwise succeeded.
+    await Vendor.updateOne({ _id: req.id }, { $set: { password: newPassword } });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+    });
+  } catch (er) {
+    console.log("updatePassword error:", er);
+    return res.status(500).json({
+      success: false,
+      message: "Could not update your password",
+    });
+  }
+};
+
+// -----------------------------------------------------------------------------
 // ADDRESS BOOK (customer app) — the buyer's saved delivery addresses, stored on
 // their own Vendor document. All four are scoped to the token's user; nobody
 // can read or edit another account's addresses.
