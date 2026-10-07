@@ -4,3 +4,6 @@
 #   npm install && npx puppeteer browsers install chrome
 .cache/
 uploads/
+
+# Local backups written by scripts/ (contain database data — never push)
+scripts/backups/

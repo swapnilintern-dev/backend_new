@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { pickMedicineInfo } from "../utils/medicineInfo.js";
 import { Readable } from "stream";
 import cloudinary from "../utils/cloudinary.js";
 import Product from "../model/productModel.js";
@@ -342,6 +343,10 @@ const addnewProduct = async (req, res) => {
       reviewCount: num(reviewCount, 0),
       badge: badge || undefined,
       packInfo: packInfo || "",
+      // Medicine information (composition, uses, storage, side effects,
+      // precautions, directions). Display-only; only keys actually sent are
+      // included, and the schema defaults fill the rest.
+      ...pickMedicineInfo(req.body),
       // Legacy single-batch fields are set here only when NOT using a batches
       // array; either way recalcProductStock below re-mirrors them from the
       // FEFO-front batch, so they stay authoritative.
@@ -565,6 +570,12 @@ export const updateProduct = async (req, res) => {
     setIf("active", bool(b.active));
     setIf("prescriptionRequired", bool(b.prescriptionRequired));
     setIf("batch_no", str(b.batch_no));
+
+    // Medicine information — only the keys present in the body are touched,
+    // so an unrelated update (e.g. the active toggle) never wipes them.
+    for (const [key, value] of Object.entries(pickMedicineInfo(b))) {
+      existing[key] = value;
+    }
 
     // Expiry: parse to a Date when the client sends one. No past-date guard
     // here on purpose — editing a medicine may legitimately correct historical

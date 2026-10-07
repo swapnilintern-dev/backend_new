@@ -12,6 +12,7 @@ import outletStock from "../model/outletStockModel.js";
 import { generatePDF } from "../utils/generatePdf.js";
 import cloudinary from "../utils/cloudinary.js";
 import { normalizeFreeQty } from "../utils/freeGoods.js";
+import { tierOf, toPaise, unitPriceFor } from "../utils/buyerPricing.js";
 import { buildInvoiceItems, invoiceRow } from "../utils/invoiceItems.js";
 import {
     withInventoryTxn,
@@ -69,10 +70,17 @@ export const placeOrder = async (req, res) => {
             0
         );
 
-        const totalAmount = user.cart.reduce((total, item) =>
+        // Per-unit price for THIS buyer: the regular price minus their tier's
+        // discount (wholesale → wholesellerPercent, hospital/clinic →
+        // drDisPercent, retail → none). The same figure feeds the order line,
+        // the total, the invoice and the Razorpay amount.
+        const buyerTier = tierOf(user);
+        const unitPrice = (p) => unitPriceFor(p, buyerTier);
 
-            total + item.product.price * item.quantity, 0
-        )
+        const totalAmount = toPaise(user.cart.reduce((total, item) =>
+
+            total + unitPrice(item.product) * item.quantity, 0
+        ))
 
         const amountWord = converter.toWords(totalAmount);
 
@@ -93,7 +101,7 @@ export const placeOrder = async (req, res) => {
                     orderItems.push({
                         product: item.product._id,
                         quantity: item.quantity,
-                        orderPrice: item.product.price,
+                        orderPrice: unitPrice(item.product),
                         // Free goods recorded on the cart line (staff-set) —
                         // invoice-only, totalAmount above bills `quantity` only.
                         freeQty: normalizeFreeQty(item.freeQty),
@@ -171,7 +179,7 @@ export const placeOrder = async (req, res) => {
 
                 const gst = Number(cartSnapshot[i].product.gstPercent) || 0;
 
-                const item_price = cartSnapshot[i].product.price;
+                const item_price = unitPrice(cartSnapshot[i].product);
                 const item_qty = cartSnapshot[i].quantity;
 
                 const itemTotal = item_price * item_qty;
@@ -221,8 +229,8 @@ export const placeOrder = async (req, res) => {
                         quantity: item.quantity,
                         // FREE GOODS — free units on this line, never priced.
                         freeQty: normalizeFreeQty(item.freeQty),
-                        price: item.product.price,
-                        amount: item.product.price * item.quantity,
+                        price: unitPrice(item.product),
+                        amount: toPaise(unitPrice(item.product) * item.quantity),
                         // The lot actually sold, off the order line's snapshot —
                         // NOT product.batch_no, which is only the current
                         // FEFO-front lot and may already have moved on.
@@ -361,6 +369,9 @@ export const placeSingleOrder = async (req, res) => {
         const { address, city, state, pincode, country, phoneNo } = req.body;
 
         const Product = await product.findById(product_id);
+        // Same tier rule as the cart order — this buyer's per-unit price.
+        const buyer = await Vendor.findById(userId).select("vendor_type shop_type");
+        const singlePrice = Product ? unitPriceFor(Product, tierOf(buyer)) : 0;
 
         if (!Product)
             return res.status(404)
@@ -389,7 +400,7 @@ export const placeSingleOrder = async (req, res) => {
                 const orderItems = [{
                     product: Product._id,
                     quantity: 1,
-                    orderPrice: Product.price,
+                    orderPrice: singlePrice,
                     batch_no: allocations[0]?.batch_number ?? Product.batch_no,
                     exp_date: allocations[0]?.expiry_date ?? Product.exp_date,
                     allocations,
@@ -406,10 +417,10 @@ export const placeSingleOrder = async (req, res) => {
                         country,
                         phoneNo
                     },
-                    totalAmount: Product.price,
+                    totalAmount: singlePrice,
                     // orderModel me amountWord required hai — iske bina yahan
                     // ValidationError se order 500 ho jata tha.
-                    amountWord: converter.toWords(Product.price),
+                    amountWord: converter.toWords(singlePrice),
                 }], { session });
 
                 return created[0];

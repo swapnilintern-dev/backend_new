@@ -1,5 +1,12 @@
 import XLSX from "xlsx";
 import product from "../model/productModel.js";
+import {
+    infoFromDetails,
+    infoFromProductRow,
+    productIdOf,
+    productNameOf,
+    readDetailSheets,
+} from "../utils/medicineInfo.js";
 
 export const bulkUploadProducts = async (req, res) => {
     try {
@@ -35,6 +42,11 @@ export const bulkUploadProducts = async (req, res) => {
                 message: "Excel sheet is empty"
             });
         }
+
+        // Optional details sheet(s) in the same workbook — the company's
+        // long-format Side-Effects / Precautions / Usage Direction rows. Absent
+        // sheets simply yield empty lookups.
+        const detailSheets = readDetailSheets(XLSX, workbook, sheetName);
 
        // Arrays 
 
@@ -358,6 +370,17 @@ export const bulkUploadProducts = async (req, res) => {
 
                 quantity: String(
                     row["Quantity"] || "1"
+                ),
+
+                // MEDICINE INFORMATION (display only — never affects price,
+                // stock or validation). Read from the product row's own
+                // Composition / Use of Product / Storage / … columns, then from
+                // any details sheet in the same file (Side-Effects, Precautions,
+                // Usage Direction), matched on Product ID, else on the name.
+                ...infoFromProductRow(row),
+                ...infoFromDetails(
+                    detailSheets.byId.get(productIdOf(row)) ||
+                    detailSheets.byName.get(productNameOf(row))
                 )
             };
             productsToInsert.push(

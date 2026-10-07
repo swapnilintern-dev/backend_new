@@ -68,11 +68,24 @@ const productSchema = new mongoose.Schema({
         default :"1"
     },
  drDisPercent : {
-        type : String 
+        type : String
     },
     wholesellerPercent :{
-        type : String 
+        type : String
     },
+
+    // --- Medicine information (display only) ---------------------------------
+    // Shown on the product details screen under the name and company. Every
+    // field is optional and defaults to empty, so products that predate them
+    // need no migration — the app simply hides an empty section. None of these
+    // affect price, stock or ordering. Normalised by utils/medicineInfo.js.
+    composition: { type: String, default: "", trim: true },   // salt + strength
+    uses:        { type: String, default: "", trim: true },   // "Use of Product"
+    storage:     { type: String, default: "", trim: true },   // e.g. "Store 2–8°C"
+    precautions: { type: String, default: "", trim: true },
+    directions:  { type: String, default: "", trim: true },   // "Usage Direction"
+    // A LIST, one entry per side effect — the app renders it as bullets.
+    sideEffects: { type: [String], default: [] },
 } ,{timestamps: true} ) ;
 
 // --- Live expiry flag (Feature 2/4) --------------------------------------
