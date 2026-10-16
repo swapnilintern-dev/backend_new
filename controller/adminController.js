@@ -50,6 +50,10 @@ export const statusApproval = async (req, res) => {
             });
         }
 
+        const generatedOtp = Math.floor(
+            100000 + Math.random() * 900000
+        ).toString();
+
         // Status update karke save karein
         pendingVendor.approvalStatus = "Approved";
         await pendingVendor.save();
@@ -57,17 +61,18 @@ export const statusApproval = async (req, res) => {
         // Email sending (Best-effort: agar mail fail bhi ho toh approval cancel nahi hoga)
         try {
             const brevoResponse = await sendBrevoEmail({
-      to: pendingVendor.email,
-      toName: pendingVendor.contact_person_name,
-      subject: "Account Approved - VS Arogya",
-      htmlContent: `
+                to: pendingVendor.email,
+                toName: pendingVendor.contact_person_name,
+                subject: "Account Approved - VS Arogya",
+                htmlContent: `
                 <div style="font-family: Arial, sans-serif; line-height: 1.6; padding: 20px;">
                     <h2>Registration Approved! 🎉</h2>
                     <p>Hello <b>${pendingVendor.contact_person_name}</b>,</p>
                     <p>Your vendor account for <b>${pendingVendor.store_name}</b> has been successfully approved by the admin.</p>
                     
                     <div style="background: #f4f4f4; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <p style="margin: 0;"><b>Your Login ID / Mobile No:</b> ${pendingVendor.mobile_no}</p>
+                        <p style="margin: 0;"><b>Your Login ID :</b> ${pendingVendor.mobile_no} </p>
+                        <p style="margin: 0;"><b> password is  :</b> ${generatedOtp} </p>
                     </div>
 
                     <p>You can now sign in to the app or website with your email OTP to see prices and start ordering.</p>
@@ -75,7 +80,7 @@ export const statusApproval = async (req, res) => {
                     <p>Warm Regards,<br><b>Team VS Arogya</b></p>
                 </div>
             `,
-    });
+            });
             console.log("Approval email sent via Brevo:", brevoResponse?.messageId || brevoResponse);
 
         } catch (mailErr) {
@@ -600,9 +605,9 @@ export const getVendorDocument = async (req, res) => {
         const head = buffer.subarray(0, 4).toString("latin1");
         const sniffed = head.startsWith("%PDF") ? "application/pdf"
             : buffer[0] === 0xff && buffer[1] === 0xd8 ? "image/jpeg"
-            : head.startsWith("\x89PNG") ? "image/png"
-            : head === "RIFF" ? "image/webp"
-            : null;
+                : head.startsWith("\x89PNG") ? "image/png"
+                    : head === "RIFF" ? "image/webp"
+                        : null;
         const contentType = sniffed || MIME_BY_EXT[ext] || upstream.headers.get("content-type") || "application/octet-stream";
 
         res.setHeader("Content-Type", contentType);
