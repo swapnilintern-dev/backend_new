@@ -368,7 +368,9 @@ export const clearCart = async(req , res ) => {
     console.log("cart length is: befor" ,user.cart.length ) ;
 
 
-    user.cart.length = 0 ;
+    // Reassign: setting .length on a Mongoose array is not tracked, so the
+    // cart was never actually emptied in the database.
+    user.cart = [] ;
 
     console.log("cart length is:after " ,user.cart.length ) ;
     await user.save() ;
