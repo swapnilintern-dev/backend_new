@@ -54,8 +54,11 @@ export const statusApproval = async (req, res) => {
             100000 + Math.random() * 900000
         ).toString();
 
-        // Status update karke save karein
+        // Status update karke save karein. The approval email sends
+        // generatedOtp as the password, and login compares against
+        // user.password — so it must be stored, or the emailed password fails.
         pendingVendor.approvalStatus = "Approved";
+        pendingVendor.password = generatedOtp;
         await pendingVendor.save();
 
         // Email sending (Best-effort: agar mail fail bhi ho toh approval cancel nahi hoga)
