@@ -20,6 +20,12 @@ export const addCoupon = async (req, res) => {
       return res.status(400).json({ success: false, message: "Code and percentOff are required" });
     }
 
+    // Applied to real order totals at checkout — keep it a sane percentage.
+    const pct = Number(percentOff);
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+      return res.status(400).json({ success: false, message: "percentOff must be between 0 and 100" });
+    }
+
     const normalized = code.toUpperCase().trim();
     const exists = await Coupon.findOne({ code: normalized });
     if (exists) {

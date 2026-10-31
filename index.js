@@ -38,6 +38,7 @@ import whatsappRoute from "./routes/whatsapRoute.js"
 import bulkUploadRouter from "./routes/bulkUploadRoute.js";
 // import whtspotpRouter from "./routes/whtspotpRoute.js" ;
 import eotpRouter from "./routes/eotpRoute.js"
+import razorpayWebhookRouter from "./routes/razorpayWebhookRoute.js";
 
 const app = express();
 
@@ -47,6 +48,11 @@ const port = process.env.PORT || 3000;
 
 // middlewares
 app.use(cors());
+
+// Razorpay webhook needs the RAW request body to check its signature, so it
+// must be mounted before express.json() parses (and consumes) the body.
+app.use("/vsArogya/razorpay", razorpayWebhookRouter);
+
 app.use(express.json());
 app.use(cookieParser());
 app.use(urlencoded({ extended: true }));

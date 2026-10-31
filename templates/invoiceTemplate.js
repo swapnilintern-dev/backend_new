@@ -127,6 +127,21 @@ export const generateInvoiceHTML = (data) => {
         gross_total: money(data.gross_total),
         round_off: data.round_off ?? "0.00",
 
+        // Extra summary row, only when the order used a coupon. Outlet and
+        // older callers pass no coupon_discount, so their invoice is unchanged.
+        coupon_row: Number(data.coupon_discount) > 0
+            ? `<tr>
+                <td class="col-item"></td>
+                <td class="col-qty"></td>
+                <td class="col-total">
+                    <div class="flex-total-container">
+                        <span class="total-label">COUPON${data.coupon_code ? ` (${data.coupon_code})` : ""}:</span>
+                        <span class="total-amount">- ${money(data.coupon_discount)}</span>
+                    </div>
+                </td>
+            </tr>`
+            : "",
+
         amount: money(data.amount),
         amount_words: data.amount_words,
 

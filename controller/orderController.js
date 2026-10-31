@@ -13,6 +13,7 @@ import { generatePDF } from "../utils/generatePdf.js";
 import cloudinary from "../utils/cloudinary.js";
 import { normalizeFreeQty } from "../utils/freeGoods.js";
 import { tierOf, toPaise, unitPriceFor } from "../utils/buyerPricing.js";
+import Coupon from "../model/couponModel.js";
 import { buildInvoiceItems, invoiceRow } from "../utils/invoiceItems.js";
 import {
     withInventoryTxn,
@@ -36,6 +37,12 @@ export const placeOrder = async (req, res) => {
             country,
             phoneNo
         } = req.body;
+
+        // The app sends the code as `coupan_discount` (sic); accept the
+        // correctly spelled `couponCode` too.
+        const couponInput = String(
+            req.body.couponCode ?? req.body.coupan_discount ?? ""
+        ).trim().toUpperCase();
 
 
         const user = await Vendor.findById(userId).populate("cart.product");
@@ -77,10 +84,36 @@ export const placeOrder = async (req, res) => {
         const buyerTier = tierOf(user);
         const unitPrice = (p) => unitPriceFor(p, buyerTier);
 
-        const totalAmount = toPaise(user.cart.reduce((total, item) =>
+        const subTotal = toPaise(user.cart.reduce((total, item) =>
 
             total + unitPrice(item.product) * item.quantity, 0
         ))
+
+        // Coupon: percentOff of the subtotal, capped at maxDiscount. Checked
+        // here — not trusted from the app — so an inactive/unknown code is
+        // refused before any stock is touched. The same total feeds the order,
+        // the Razorpay amount and the invoice.
+        let coupon = null;
+        let couponDiscount = 0;
+        if (couponInput) {
+            coupon = await Coupon.findOne({
+                code: couponInput,
+                active: true,
+                expired: { $ne: true },
+            });
+            if (!coupon) {
+                return res.status(400).json({
+                    message: "This coupon is no longer valid. Remove it and try again.",
+                    success: false
+                });
+            }
+            let off = subTotal * (Number(coupon.percentOff) || 0) / 100;
+            const cap = Number(coupon.maxDiscount);
+            if (Number.isFinite(cap) && cap > 0 && off > cap) off = cap;
+            couponDiscount = toPaise(Math.min(Math.max(off, 0), subTotal));
+        }
+
+        const totalAmount = toPaise(subTotal - couponDiscount);
 
         const amountWord = converter.toWords(totalAmount);
 
@@ -123,6 +156,7 @@ export const placeOrder = async (req, res) => {
                         phoneNo
                     },
                     totalAmount,
+                    ...(coupon ? { couponCode: coupon.code, couponDiscount } : {}),
                     orderNo,
                     amountWord,
                 }], { session });
@@ -134,6 +168,12 @@ export const placeOrder = async (req, res) => {
                 return res.status(400).json({ message: err.message, success: false });
             }
             throw err;
+        }
+
+        if (coupon) {
+            // Usage counter for the marketing list — never fails the order.
+            Coupon.updateOne({ _id: coupon._id }, { $inc: { redemptions: 1 } })
+                .catch((e) => console.log("coupon redemption count failed:", e.message));
         }
 
 
@@ -187,6 +227,14 @@ export const placeOrder = async (req, res) => {
                 if (gstSlabs[gst] !== undefined) {
                     gstSlabs[gst] += itemTotal - itemTotal / (1 + gst / 100);
                 }
+            }
+
+            // A coupon lowers what is actually charged, so the GST inside each
+            // slab shrinks by the same proportion (the discount is spread
+            // across every line pro-rata).
+            if (couponDiscount > 0 && subTotal > 0) {
+                const ratio = totalAmount / subTotal;
+                for (const slab of Object.keys(gstSlabs)) gstSlabs[slab] *= ratio;
             }
 
             const totalgst =
@@ -243,8 +291,11 @@ export const placeOrder = async (req, res) => {
                 total_item: cartSnapshot.length,
                 total_qty,
                 // Prices already include GST, so the gross total is simply the
-                // order total — tax is NOT added on top a second time.
-                gross_total: totalAmount,
+                // sum of the lines — tax is NOT added on top a second time.
+                // Any coupon is shown as its own line below it.
+                gross_total: subTotal,
+                coupon_code: coupon ? coupon.code : "",
+                coupon_discount: couponDiscount,
                 round_off: (Math.round(totalAmount) - totalAmount).toFixed(2),
 
 

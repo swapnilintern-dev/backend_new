@@ -75,10 +75,18 @@ export const generateInvoiceForOrder = async (orderId) => {
             const amt = lineAmount(it);
             if (slabs[pct] !== undefined) slabs[pct] += amt - amt / (1 + pct / 100);
         }
-        const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
-
         const totalQty = items.reduce((q, it) => q + it.quantity, 0);
         const grossTotal = items.reduce((t, it) => t + lineAmount(it), 0);
+
+        // A coupon (customer cart orders) lowers what was charged, so the GST
+        // inside each slab shrinks by the same proportion — same rule as
+        // placeOrder's own invoice.
+        const couponDiscount = Number(Order.couponDiscount) || 0;
+        if (couponDiscount > 0 && grossTotal > 0) {
+            const ratio = (grossTotal - couponDiscount) / grossTotal;
+            for (const slab of Object.keys(slabs)) slabs[slab] *= ratio;
+        }
+        const gstTotal = slabs[5] + slabs[12] + slabs[18] + slabs[28];
 
         // CGST and SGST are simply the total GST split into two equal halves
         // (same-state sale: half goes to the centre, half to the state).
@@ -87,7 +95,8 @@ export const generateInvoiceForOrder = async (orderId) => {
 
         // Round-off = difference between the gross total and its nearest
         // whole rupee, e.g. gross 98.60 → payable 99 → round-off +0.40.
-        const roundOff = Math.round(grossTotal) - grossTotal;
+        const payable = grossTotal - couponDiscount;
+        const roundOff = Math.round(payable) - payable;
 
         const invoiceNumber = `INV-${Date.now()}`;
 
@@ -130,6 +139,8 @@ export const generateInvoiceForOrder = async (orderId) => {
             total_item: items.length,
             total_qty: totalQty,
             gross_total: grossTotal,
+            coupon_code: Order.couponCode || "",
+            coupon_discount: couponDiscount,
 
             amount_words: Order.amountWord,
             amount: Order.totalAmount,

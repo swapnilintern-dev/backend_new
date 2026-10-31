@@ -152,6 +152,17 @@ const orderSchema = new mongoose.Schema({
         required: true
     },
 
+    // Coupon applied at place-order (customer cart orders only). totalAmount
+    // above is already AFTER this discount; couponDiscount is the rupees taken
+    // off the line total. Absent on orders without a coupon.
+    couponCode: {
+        type: String
+    },
+    couponDiscount: {
+        type: Number,
+        default: 0
+    },
+
     orderStatus: {
         type: String,
         enum: ["Pending", "Confirm Order", "Shipped", "Out for Delivery", "Delivered", "Cancelled"],
