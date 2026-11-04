@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import Vendor from "../model/userModel.js";
 import Outlet from "../model/outletregistersModel.js";
 import { sendBrevoEmail } from "../utils/brevoUtils.js";
+import { INACTIVE_MESSAGE, isInactiveVendor } from "../middlewares/requireActiveVendor.js";
 
 // How long a mailed code stays usable. Mongo's TTL index on the Eotp document
 // is the primary enforcement; this is the exact check so a code can't slip
@@ -282,6 +283,17 @@ export const verifyOtpAndLogin = async (req, res) => {
         // No account yet → browse-only until they register
         if (!user) {
             return guestLogin(res, email, null);
+        }
+
+        // Admin switched this vendor off: no session at all — not even the
+        // browse-only guest one, which would send them to register again
+        // under an email that is already taken.
+        if (isInactiveVendor(user)) {
+            return res.status(403).json({
+                success: false,
+                code: "ACCOUNT_INACTIVE",
+                message: INACTIVE_MESSAGE,
+            });
         }
 
         // Same approval policy as POST /login: staff skip it, a vendor must be

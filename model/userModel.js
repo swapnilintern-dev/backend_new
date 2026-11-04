@@ -162,6 +162,17 @@ const vendorSchema = new mongoose.Schema(
       default: "Pending"
     },
 
+    // Admin on/off switch for an account (PUT /vsArogya/vendor-status/:id),
+    // separate from approval: switching it off keeps the approval and the
+    // password, and switching it back on needs no new email. Accounts created
+    // before this field existed have nothing stored and read as active — so
+    // query inactive ones with { isActive: false } and active ones with
+    // { isActive: { $ne: false } }, never { isActive: true }.
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+
     // Last successful sign-in. Written by the email-OTP login
     // (controller/emailverifyController.js), which also returns it. Declared
     // here because Mongoose runs in strict mode: without the field the

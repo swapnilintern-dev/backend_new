@@ -1,5 +1,5 @@
 import express from "express";
-import approvalneedUser, { confirmOrder, deliveredOrder, getAllActiveVendor, getAllOrder, getallVendors, getSingleOrder, outofDelivery, rejectApproval, shippedOrder, statusApproval, totalSell, getVendorDocument  } from "../controller/adminController.js";
+import approvalneedUser, { confirmOrder, deliveredOrder, getAllActiveVendor, getAllOrder, getallVendors, getSingleOrder, outofDelivery, rejectApproval, shippedOrder, statusApproval, totalSell, getVendorDocument, updateVendorStatus  } from "../controller/adminController.js";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
 import requireRole from "../middlewares/requireRole.js";
 
@@ -15,6 +15,8 @@ router.get("/pending-vendor" , ...adminOnly, approvalneedUser) ;
 router.put("/approval-mail/:id" , ...adminOnly, statusApproval ) ;
 router.put("/reject-vendor/:id" , ...adminOnly, rejectApproval ) ;
 router.get("/vendor-doc/:id/:field" , ...adminOnly, getVendorDocument ) ;
+// Active / inactive switch — body { isActive: true | false }.
+router.put("/vendor-status/:id" , ...adminOnly, updateVendorStatus ) ;
 
 // Still public: the Flutter delivery and marketing screens call it without a
 // token. Lock it once those builds send one.

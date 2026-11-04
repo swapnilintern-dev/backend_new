@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 
 
 import { sendBrevoEmail } from "../utils/brevoUtils.js";
+import { INACTIVE_MESSAGE, isInactiveVendor } from "../middlewares/requireActiveVendor.js";
 
 
 export const registerVendor = async (req, res) => {
@@ -214,6 +215,15 @@ export const login = async (req, res) => {
 
           success: false
         });
+    }
+
+    // Admin switched this vendor off (PUT /vendor-status/:id).
+    if (isInactiveVendor(user)) {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_INACTIVE",
+        message: INACTIVE_MESSAGE,
+      });
     }
 
     // Buyers/vendors can only log in once an admin approves them. Staff

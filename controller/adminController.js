@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import cloudinary from "../utils/cloudinary.js";
 import order from "../model/orderModel.js";
 import Vendor from "../model/userModel.js";
@@ -619,6 +620,68 @@ export const getVendorDocument = async (req, res) => {
         return res.status(200).send(buffer);
     } catch (error) {
         console.log("error from getVendorDocument", error);
+        return res.status(500).json({ success: false, message: "Internal server error " });
+    }
+};
+
+
+// =============================================================================
+// PUT /vsArogya/vendor-status/:id   body { "isActive": true | false }   (admin)
+//
+// Switches a vendor account on or off. Touches ONLY `isActive`: approval,
+// password and everything else stay as they are, and no email is sent — so
+// switching back on needs no new password. While off, the vendor cannot sign
+// in (password or email OTP) and cannot place an order or start a payment
+// (middlewares/requireActiveVendor.js), even on a token issued earlier.
+// =============================================================================
+const STAFF_ROLES = ["admin", "marketing", "delivery", "agent", "outlet"];
+
+const parseActive = (value) => {
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+    return null;
+};
+
+export const updateVendorStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!mongoose.isValidObjectId(id)) {
+            return res.status(400).json({ success: false, message: "Invalid vendor id" });
+        }
+
+        const isActive = parseActive(req.body?.isActive);
+        if (isActive === null) {
+            return res.status(400).json({
+                success: false,
+                message: "isActive must be true or false",
+            });
+        }
+
+        const vendor = await Vendor.findById(id).select("role store_name");
+        if (!vendor) {
+            return res.status(404).json({ success: false, message: "Vendor not found" });
+        }
+
+        // Staff accounts live in the same collection; this switch is for
+        // buyers only, so an admin cannot lock out a colleague (or themself).
+        if (STAFF_ROLES.includes(String(vendor.role || "").toLowerCase())) {
+            return res.status(400).json({
+                success: false,
+                message: "Only vendor accounts can be activated or deactivated",
+            });
+        }
+
+        // updateOne, not save(): only this one field is written, and the
+        // document's other fields are not re-validated.
+        await Vendor.updateOne({ _id: id }, { $set: { isActive } });
+
+        return res.status(200).json({
+            success: true,
+            message: isActive ? "Vendor activated" : "Vendor deactivated",
+            vendor: { _id: vendor._id, store_name: vendor.store_name, isActive },
+        });
+    } catch (error) {
+        console.log("error from updateVendorStatus", error);
         return res.status(500).json({ success: false, message: "Internal server error " });
     }
 };
